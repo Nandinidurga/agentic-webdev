@@ -22,19 +22,52 @@ We are implementing this project in structured phases. Below is the current impl
 - [x] Implement **Reviewer Agent** with self-healing feedback loop capability.
 - [x] Wire state nodes into a compiler-ready LangGraph workflow.
 
-### Phase 3: RAG Database Populating (Active)
-- [ ] Clone open-source Web Dev reference libraries (Next.js, Tailwind, React, FastAPI).
-- [ ] Implement `rag_ingest.py` to chunk PDFs/documentation and load them into ChromaDB.
-- [ ] Wire vector database retrieval logic directly into the **RAG Knowledge Agent** to feed high-fidelity templates to the Coder.
+### Phase 3: RAG Database Populating (Completed)
+- [x] Clone open-source Web Dev reference libraries (`knowledge_base/react.dev` cloned).
+- [x] Implement `rag_ingest.py` to chunk Markdown, MDX, and PDF documentation and load them into ChromaDB (35MB vector database generated).
+- [x] Wire vector database retrieval logic directly into the **RAG Knowledge Agent** (uses HuggingFace local sentence-transformers to retrieve gold standard context).
 
-### Phase 4: Dynamic Sandbox & Execution (Next Steps)
-- [ ] Connect the Reviewer Agent to an active runtime environment (like local Docker containers or the E2B Code Interpreter API).
-- [ ] Execute generated code live within the sandbox during generation to capture build errors (e.g. syntax, compile, import failures).
-- [ ] Feed stderr back to Coder Agent for iterative self-healing before approval.
+### Phase 4: Dynamic Sandbox & Execution (Active)
+- [/] Set up E2B / Docker Sandbox connectors (tested connectivity using `test_e2b.py`).
+- [ ] Connect the Reviewer Agent to actively execute code in the sandbox during generation rather than returning mock results.
+- [ ] Capture execution logs/errors and feed stderr back to the Coder Agent for iterative self-healing.
 
-### Phase 5: Hosting & Production Deployments
+### Phase 5: Hosting & Production Deployments (Next Steps)
 - [ ] Connect Orchestrator to Vercel/Netlify hosting APIs.
 - [ ] Return live preview URLs of completed applications directly to the interactive Next.js editor.
+
+---
+
+## 📂 Project Directory Structure
+
+```
+agentic-webdev/
+├── backend/                  # Python FastAPI Backend & LangGraph Agent Pipeline
+│   ├── agents/               # Cognitive Agent Nodes
+│   │   ├── orchestrator.py   # Technical plans breakdown (Gemini)
+│   │   ├── knowledge.py      # Retrieves context from vector DB (RAG)
+│   │   ├── coder.py          # Generates codebase files structure (JSON)
+│   │   └── reviewer.py       # Validates output / Mock Debugger stub
+│   ├── chroma_db/            # Chroma Vector DB storing chunked documentation
+│   ├── main.py               # FastAPI gateway server running on port 8000
+│   ├── graph.py              # Compiled LangGraph Workflow connecting the nodes
+│   ├── state.py              # LangGraph AgentState definitions
+│   ├── rag_ingest.py         # Loads/splits MD, MDX, PDF documentation into ChromaDB
+│   ├── requirements.txt      # Python dependencies list
+│   └── test_*.py             # CLI scripts for testing API, graph, E2B
+├── frontend/                 # Next.js Front-end App & Monaco Editor Sandbox Workspace
+│   ├── src/
+│   │   ├── app/
+│   │   │   ├── page.tsx      # Main Page with editor workspace & AI developer chat
+│   │   │   └── layout.tsx    # General wrapper layout
+│   │   └── components/
+│   │       └── Editor.tsx    # Custom Monaco Code Editor component
+│   └── package.json          # Node dependencies (Next.js, Sandpack, Monaco)
+├── knowledge_base/           # Repository source markdown/PDF files for RAG ingestion
+│   └── react.dev/            # Cloned local repository of React dev documentation
+├── architecture_and_workflow.md # Architectural design specifications
+└── implementation_plan.md    # Initial implementation checklist & verification plan
+```
 
 ---
 
