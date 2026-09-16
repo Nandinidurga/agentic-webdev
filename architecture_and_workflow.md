@@ -1,124 +1,205 @@
-# Agent-Based LLM for Web Application Development
+# Agentic IDE: Full-Stack Architecture & Cognitive Workflow
 
 > [!NOTE]
-> **Vision:** A platform that converts natural language prompts into full-stack, deployed web applications by orchestrating multiple specialized AI agents with real-time access to technical documentation (RAG).
+> **Vision:** An autonomous full-stack AI web development engineering platform that translates natural language prompts into complete, verified, live-previewable web applications featuring both a **Node.js / Express.js REST API Backend** and a **React Interactive Frontend**.
+
+---
 
 ## 1. System Architecture (The "Brain & Hands")
 
-The architecture is divided into the cognitive processing layer (Agents) and the execution environment (Infrastructure).
+The architecture integrates a cyclical multi-agent cognitive graph (LangGraph), a dual-provider resilient LLM engine, a dual-domain Vector Knowledge Base (ChromaDB), and an in-browser isolated execution sandbox (CodeSandbox Sandpack).
 
-### Architectural Diagram
+### High-Level Architecture Diagram
 
 ```mermaid
-graph TD
-    User([User]) --> |"Natural Language Prompt"| UI[IDE Interface\nNext.js + Monaco]
-    UI --> Orchestrator
+flowchart TD
+    User([User Natural Language Prompt]) --> UI[Next.js 16 Full-Stack Studio\n• Sandpack Live Preview\n• REST API Inspector\n• Plan & Logs Viewer\n• ZIP Exporter]
     
-    subgraph Cognitive Layer - LangGraph Agents
-        Orchestrator[Orchestrator Agent\n'The Manager']
-        Knowledge[RAG-Knowledge Agent\n'The Researcher']
-        Coder[Coder Agent\n'The Developer']
-        Reviewer[Reviewer/Debugger Agent\n'The QA']
+    UI -->|POST /generate| Gateway[FastAPI Backend Gateway :8000]
+
+    subgraph Cognitive Layer - LangGraph Multi-Agent Workflow
+        Orchestrator[Orchestrator Agent\n• Architectural Blueprint\n• Structured REST API Spec]
+        Knowledge[Dual RAG Knowledge Agent\n• ChromaDB Semantic Search\n• React + Express Docs]
+        Coder[Coder Agent\n• Express Server + CRUD Routes\n• React UI Components & Styles\n• Dual-Mode API Client]
+        Reviewer[Reviewer & Auto-Healer Agent\n• Static Syntax & Route Check\n• Runtime Guard Injection\n• Self-Healing Feedback Loop]
     end
-    
-    subgraph Infrastructure & Memory
-        VectorDB[(Vector DB\nChromaDB/Pinecone)]
-        Sandbox[Execution Sandbox\nE2B/Docker]
+
+    subgraph LLM Resilience Engine
+        LLMFactory[Resilient LLM Factory]
+        Groq[Primary: Groq Cloud\nGPT-OSS-20b / Llama-3.3-70b\nAutomated Backoff Retry]
+        Gemini[Fallback: Google Gemini\nGemini 3.6 Flash]
     end
-    
-    Orchestrator --> |Task Breakdown| Knowledge
-    Orchestrator --> |Assigns Tasks| Coder
-    
-    Knowledge <--> |Query & Retrieve Docs/Snippets| VectorDB
-    Knowledge --> |Provides 'Gold Standard' Context| Coder
-    
-    Coder --> |Writes Code| Sandbox
-    Sandbox --> |Execution Results/Errors| Reviewer
-    Reviewer --> |Self-Healing Feedback| Coder
-    Reviewer --> |Approval| Orchestrator
-    
-    Orchestrator --> |Live Preview URL| UI
+
+    subgraph Knowledge & Memory Layer
+        Chroma[(ChromaDB Vector Store\nall-MiniLM-L6-v2 Embeddings)]
+        FrontendDocs[React 19 Official Documentation]
+        BackendDocs[Express.js & REST Best Practices]
+    end
+
+    Gateway --> Orchestrator
+    Orchestrator --> Knowledge
+    Knowledge <--> Chroma
+    FrontendDocs --> Chroma
+    BackendDocs --> Chroma
+    Knowledge --> Coder
+    Coder --> Reviewer
+    Reviewer -->|Self-Healing Loop if Errors & Iteration < 3| Coder
+    Reviewer --> Gateway
+
+    Orchestrator -.-> LLMFactory
+    Coder -.-> LLMFactory
+    LLMFactory --> Groq
+    Groq -.->|On 429 TPM Rate Limit| Gemini
+
+    Gateway -->|Full-Stack Files & Specs| UI
+    UI --> Sandpack[Live In-Browser Sandpack Sandbox]
+    UI --> ApiInspector[Interactive REST API Tester]
+    UI --> ZipExport[Full-Stack ZIP Distribution]
 ```
 
-## 2. The 4 Key Agents
+---
 
-1. **Orchestrator Agent (The Manager):** Analyzes the prompt, breaks it into actionable technical tasks, and maintains the overall state of the application being built.
-2. **RAG-Knowledge Agent (The Researcher):** Queries the Vector Database when specific technical context is needed (e.g., "How to use Stripe in Next.js?"), retrieving up-to-date documentation and code templates.
-3. **Coder Agent (The Developer):** Receives the technical tasks and the researched context to write the actual code files (Frontend, Backend, configurations).
-4. **Reviewer/Debugger Agent (The QA):** Monitors the execution of the generated code within the sandbox. It captures errors and provides specific instructions back to the Coder Agent for self-healing and bug fixing.
+## 2. The 4 Cognitive Agents
 
-## 3. The "Agentic RAG" Workflow
+### 1. Orchestrator Agent (The System Architect)
+* **Responsibility:** Deconstructs user requirements into a comprehensive technical blueprint and a structured REST API specification.
+* **Outputs:** 
+  * Architectural overview and feature roadmap.
+  * Formal API route specifications: HTTP methods (`GET`, `POST`, `PUT`, `DELETE`), paths (e.g. `/api/items`), route descriptions, and sample request/response payloads.
 
-The workflow outlines the step-by-step process from user prompt to deployed application.
+### 2. Dual RAG Knowledge Agent (The Technical Researcher)
+* **Responsibility:** Retrieves validated, gold-standard code patterns from the local vector database across two domains:
+  * **Frontend:** React 19 hooks, component lifecycles, and Tailwind styling patterns.
+  * **Backend:** Express.js routing, in-memory data modeling, CORS configuration, error-handling middleware, and REST status codes.
+* **Vector Store:** ChromaDB with local HuggingFace `sentence-transformers/all-MiniLM-L6-v2` embeddings (zero external latency and zero cost).
+
+### 3. Coder Agent (The Full-Stack Software Engineer)
+* **Responsibility:** Generates both the backend server and frontend client as a unified, cohesive JSON file tree:
+  * `/server.js`: Complete Node.js/Express.js backend with seed data, REST routes, CORS middleware, and `/api/health`.
+  * `/server/package.json`: Backend package descriptor specifying Express and CORS dependencies.
+  * `/services/api.js`: Intelligent dual-mode API client that attempts live HTTP connection to `http://localhost:5000`, with graceful fallback to an in-memory preview store inside Sandpack.
+  * `/App.js`: Complete, interactive React component with search, filtering, creation/editing forms, metrics, and state badges.
+  * `/styles.css`: Modern CSS styling with smooth micro-animations, glassmorphism cards, and responsive layouts.
+  * `/package.json`: Client package descriptor specifying `lucide-react`.
+
+### 4. Reviewer & Auto-Healer Agent (The QA Engineer & Healer)
+* **Responsibility:** Analyzes all generated files for correctness, compliance with the API specification, and runtime safety.
+* **Auto-Healing Pipeline:**
+  * Detects missing routes or unstarted servers in `/server.js`.
+  * Automatically injects defensive runtime guards into React code (`(items || []).map(...)`, `(Number(val) || 0).toFixed(2)`).
+  * Auto-heals uninitialized `useState()` hooks to `useState([])`.
+  * Standardizes single-quoted `package.json` files to strictly valid double-quoted JSON.
+* **Cyclic Loop:** If critical structural errors are detected, returns feedback to the Coder Agent for self-healing (up to 3 iterations).
+
+---
+
+## 3. The End-to-End Agentic Workflow
 
 ```mermaid
 sequenceDiagram
-    participant User
-    participant Orchestrator
-    participant Knowledge
-    participant VectorDB
-    participant Coder
-    participant Sandbox
-    participant Reviewer
-    participant Deployment
+    autonumber
+    actor User
+    participant UI as Next.js Studio
+    participant API as FastAPI Gateway
+    participant Orch as Orchestrator Agent
+    participant RAG as Knowledge Agent
+    participant Vector as ChromaDB
+    participant Coder as Coder Agent
+    participant LLM as Resilient LLM Engine
+    participant QA as Reviewer Agent
 
-    User->>Orchestrator: "Build a coffee shop dashboard..."
-    Note over Orchestrator: Planning Phase
-    Orchestrator->>Knowledge: Request Stack & Library Docs
-    Knowledge->>VectorDB: Semantic Search for Docs & Patterns
-    VectorDB-->>Knowledge: Retrieved Docs (e.g., Recharts, Next.js)
-    Knowledge-->>Coder: Context & Snippets
-    Orchestrator->>Coder: Generate UI Components
-    Note over Coder: Generation Phase
-    Coder->>Sandbox: Write & Execute Dashboard.jsx
-    Note over Sandbox: Execution Phase
-    Sandbox-->>Reviewer: Execution Logs (e.g., Module Not Found)
-    Note over Reviewer: Review Phase
-    Reviewer->>Coder: Fix Error (Install missing package)
-    Coder->>Sandbox: Update Code & Dependencies
-    Sandbox-->>Reviewer: Success / No Errors
-    Reviewer->>Orchestrator: Code Approved
-    Orchestrator->>Deployment: Trigger Vercel/Netlify API
-    Deployment-->>User: Returns Live Preview URL
+    User->>UI: Enters Prompt ("Build an Expense & Budget Tracker")
+    UI->>API: POST /generate { prompt }
+    API->>Orch: Invoke LangGraph (initial_state)
+    
+    rect rgb(240, 245, 255)
+        Note over Orch,LLM: Step 1: Planning & API Specification
+        Orch->>LLM: Formulate Architecture & REST Endpoints
+        LLM-->>Orch: Technical Plan + JSON api_spec
+    end
+
+    rect rgb(245, 255, 245)
+        Note over RAG,Vector: Step 2: Dual-Domain Context Retrieval
+        Orch->>RAG: Pass Plan & Endpoints
+        RAG->>Vector: Query React Patterns & Express Best Practices
+        Vector-->>RAG: 4 Chunks (2 Frontend, 2 Backend)
+    end
+
+    rect rgb(255, 250, 240)
+        Note over Coder,LLM: Step 3: Full-Stack Code Generation
+        RAG->>Coder: Pass Technical Context & Guidelines
+        Coder->>LLM: Generate Server + UI + Dual-Mode Client JSON
+        LLM-->>Coder: Raw File Mapping { /server.js, /App.js, ... }
+    end
+
+    rect rgb(255, 240, 245)
+        Note over QA,Coder: Step 4: Verification & Auto-Healing
+        Coder->>QA: Send Generated Files
+        QA->>QA: Run Static Checks & heal_frontend_code()
+        alt Critical Errors Found & Iteration < 3
+            QA->>Coder: Trigger Self-Healing Loop with Errors
+        else Code Validated & Healed
+            QA-->>API: Return Final Verified Full-Stack State
+        end
+    end
+
+    API-->>UI: Return JSON { plan, api_spec, files, backend_files, frontend_files }
+    UI->>UI: Sanitize Sandpack Files & Mount Sandpack Preview
+    UI->>User: Displays Live App + REST API Tester + Code Viewer
 ```
 
-### Detailed Workflow Steps:
-1. **User Input:** The user provides a high-level idea.
-2. **Planning:** The Orchestrator decides on the technical stack and libraries.
-3. **Retrieval (RAG):** The Knowledge Agent searches the Vector DB for the latest documentation, UI patterns, and best practices.
-4. **Generation:** The Coder Agent writes the code using the retrieved snippets.
-5. **Execution & Review (Self-Healing Loop):** Code is run in a secure Sandbox. If errors occur, the Reviewer instructs the Coder to fix them until the build passes.
-6. **Deployment:** Upon approval, the site is deployed, and a live preview is shown to the user.
+---
 
-## 4. The Retrieval-Augmented Generation (RAG) System
+## 4. The 3-Layer Defensive Immunity System
 
-The RAG acts as the "Long-term Memory" and is structured into specific chunks:
-- **Framework Documentation:** Latest React, Next.js, Tailwind, etc.
-- **"Gold Standard" Snippets:** Pre-built auth blocks, schemas, and UI components.
-- **Industry Standards:** Domain-specific rules (e.g., HIPAA for medical, SEO for E-commerce).
+To eliminate runtime crashes in Sandpack (such as `Cannot read properties of undefined (reading 'map')`), the system enforces three independent defense perimeters:
 
-## 5. Technology Stack
+```mermaid
+flowchart TD
+    subgraph Layer 3: Coder Prompt Hardening
+        L3A[Strict Prompt Rules] --> L3B[Collection state MUST be useState array]
+        L3A --> L3C[Collections MUST use defensive map/filter]
+        L3A --> L3D[API functions MUST return mock arrays in catch block]
+    end
 
-| Category | Tool / Framework | Purpose |
-| :--- | :--- | :--- |
-| **Agent Framework** | LangGraph | Manages the complex state and loops (Code → Error → Fix). |
-| **LLM Model** | Gemini 1.5 Flash | Chosen for its massive context window to process codebases. |
-| **Vector DB** | ChromaDB / Pinecone | Stores and retrieves technical docs for RAG. |
-| **Execution Sandbox**| E2B / Docker | Secure cloud environment to run `npm install` and tests. |
-| **Frontend UI** | Next.js + Monaco Editor| "Cursor-like" UI with an interactive editor and chat. |
-| **Backend** | Python 3.11+ | Hosts the agent orchestration logic. |
+    subgraph Layer 2: Server-Side Reviewer Auto-Healer
+        L2A[heal_frontend_code] --> L2B[Replaces bare useState with useState array]
+        L2A --> L2C[Wraps bare array methods with var or empty array]
+        L2A --> L2D[Wraps toFixed with Number conversion fallback]
+        L2A --> L2E[Converts single-quoted package.json to double quotes]
+    end
 
-## 6. Deployment & Security Considerations
+    subgraph Layer 1: Client-Side Sandpack Sanitizer
+        L1A[page.tsx Filter & Sanitizer] --> L1B[Excludes backend server files from Sandpack]
+        L1A --> L1C[Robust parsePackageJson with regex fallback]
+        L1A --> L1D[Client-side array and number guard regex]
+        L1A --> L1E[Fallback mock API store injection if missing]
+    end
 
-> [!WARNING]
-> Security in agentic systems requires strict sandboxing, as agents have the agency to execute code autonomously.
+    Layer 3 --> Layer 2 --> Layer 1 --> Sandbox[100% Crash-Free Sandpack Live Preview]
+```
 
-**Security:**
-*   **Prompt Leakage:** Use PII redaction filters before sending data.
-*   **Insecure Code:** The Reviewer Agent specifically scans for security anti-patterns (e.g., SQL injections).
-*   **Dependency Risks:** Agents are restricted to an Approved Allowlist for third-party libraries.
+---
 
-**Deployment:**
-*   **Sandbox:** The Coder Agent operates entirely inside a Docker Container to protect the host environment.
-*   **Hosting:** Final outputs are pushed to Vercel/Netlify for immediate live URLs.
-*   **Asynchronous Processing:** Background message queues (Redis/Celery) manage the multi-minute build process while keeping the UI responsive.
+## 5. Technology Stack Summary
+
+| Component | Technology | Role |
+|:---|:---|:---|
+| **Frontend IDE** | Next.js 16 (App Router), React 19, TypeScript | Reactive developer studio shell |
+| **Styling** | Vanilla CSS + TailwindCSS Utilities | Modern dark-mode UI with sleek glassmorphism |
+| **In-Browser Sandbox** | `@codesandbox/sandpack-react` | Zero-latency, browser-isolated React bundler |
+| **Backend Gateway** | FastAPI, Uvicorn (Python 3.12) | High-concurrency async REST server on port 8000 |
+| **Agent Orchestration** | LangGraph & LangChain Core | Cyclical, multi-node state graph with conditional branching |
+| **Primary LLM** | Groq Cloud (`openai/gpt-oss-20b`, `llama-3.3-70b`) | Ultra-fast token generation (~3s) with automated backoff retry |
+| **Fallback LLM** | Google Gemini (`gemini-3.6-flash`) | High-capacity fallback reasoning engine |
+| **Vector Database** | ChromaDB | Local persistent store for technical documentation |
+| **Embedding Engine** | HuggingFace `sentence-transformers/all-MiniLM-L6-v2` | Zero-cost, local semantic vectorizer |
+| **Export Utility** | `jszip` | On-the-fly packaging of runnable full-stack projects |
+
+---
+
+## 6. Execution & Sandbox Strategy
+
+* **In-Browser Sandpack Sandbox:** Client-side React code executes inside an isolated iframe managed by Sandpack. No local Docker installation is required.
+* **Dual-Mode Client Architecture:** `/services/api.js` enables the generated app to run out-of-the-box inside the browser sandbox using in-memory mock data, while instantly connecting to `http://localhost:5000` when the user starts the local Express server.
+* **Zero Backend Bundle Pollution:** Backend files (`/server.js`, `/server/package.json`) are filtered out before reaching Sandpack, preventing Node.js module resolution errors in the browser.

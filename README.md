@@ -1,40 +1,89 @@
-# Agentic IDE: Full-Stack Agent-Based Web App Developer
+# Agentic IDE: Full-Stack AI Web App Engineering Studio
 
-Agentic IDE is an advanced web development platform that converts natural language prompts into fully functional, live-previewable web applications. It orchestrates multiple specialized AI agents under the hood, utilizing a self-healing LangGraph workflow and Retrieval-Augmented Generation (RAG) for up-to-date documentation.
+Agentic IDE is an autonomous full-stack web development studio that transforms natural language prompts into complete, production-grade, live-previewable web applications. Powered by a multi-agent LangGraph cognitive architecture, dual-domain Retrieval-Augmented Generation (RAG), and a resilient multi-provider LLM pipeline, Agentic IDE writes, reviews, auto-heals, and serves both the **Express.js REST API Backend** and the **React Interactive Frontend** in real time.
 
 ---
 
-## 🚀 Plan of Action & Roadmap
+## 🚀 Key Features
 
-We are implementing this project in structured phases. Below is the current implementation status and the roadmap ahead.
+* **Full-Stack Dual Code Generation:** Generates complete Node.js/Express.js backend services (`/server.js`, seed data, REST routes, CORS, `/api/health`) and modern React client applications (`/App.js`, `/styles.css`).
+* **Interactive Live Sandpack Preview:** Instant client-side code execution with zero build wait time directly inside the browser.
+* **Dual-Mode API Client (`/services/api.js`):** Seamless hybrid client that attempts live HTTP connection to local port 5000, while falling back to an in-memory reactive store inside the browser preview sandbox.
+* **Interactive REST API Inspector:** Built-in endpoint testing console allowing users to test `GET`, `POST`, `PUT`, `DELETE` endpoints, measure response latency, inspect payloads, and copy server code.
+* **3-Layer Defensive Immunity & Auto-Healer:**
+  1. *Client-side sanitizer:* Excludes server files from Sandpack, auto-initializes `useState([])`, wraps array transformations (`.map`, `.filter`, `.reduce`), and guards `.toFixed`.
+  2. *Reviewer Auto-Healer:* Server-side AST/regex repair agent that fixes uninitialized state and single-quoted `package.json` files before transmission.
+  3. *Coder Prompt Hardening:* Strict defensive coding patterns enforced on the LLM.
+* **Resilient Multi-Provider LLM Engine:** Primary high-speed execution with **Groq Cloud** (`openai/gpt-oss-20b` or `llama-3.3-70b-versatile`) with automated per-second backoff and seamless failover to **Google Gemini** (`gemini-3.6-flash`).
+* **Dual RAG Knowledge Base:** ChromaDB vector database housing both official React documentation and curated Express.js/REST engineering patterns via local HuggingFace embeddings.
+* **One-Click Full-Stack Export:** Downloads a ready-to-run ZIP archive containing structured `/server` and `/client` directories with quickstart instructions.
 
-### Phase 1: Foundation & Scaffolding (Completed)
-- [x] Create project layout (`backend/` and `frontend/`).
-- [x] Configure standard root `.gitignore` and local environment file `.env`.
-- [x] Scaffold Next.js frontend structure with Sandpack React workspace integration.
-- [x] Scaffold FastAPI backend endpoints and LangGraph environment configurations.
+---
 
-### Phase 2: LangGraph Core Flow (Completed)
-- [x] Define LangGraph agent state (`AgentState`) to hold prompt, plan, files, errors, and metadata.
-- [x] Implement **Orchestrator Agent** to break down user prompt into clear actionable technical plans.
-- [x] Implement **RAG Knowledge Agent** stub for document retrieval integration.
-- [x] Implement **Coder Agent** to write actual codes, returning structured JSON files.
-- [x] Implement **Reviewer Agent** with self-healing feedback loop capability.
-- [x] Wire state nodes into a compiler-ready LangGraph workflow.
+## 🛠️ System Architecture
 
-### Phase 3: RAG Database Populating (Completed)
-- [x] Clone open-source Web Dev reference libraries (`knowledge_base/react.dev` cloned).
-- [x] Implement `rag_ingest.py` to chunk Markdown, MDX, and PDF documentation and load them into ChromaDB (35MB vector database generated).
-- [x] Wire vector database retrieval logic directly into the **RAG Knowledge Agent** (uses HuggingFace local sentence-transformers to retrieve gold standard context).
+```mermaid
+flowchart TD
+    User([User Prompt]) --> UI[Next.js Full-Stack Studio\nSandpack + Monaco + API Inspector]
+    UI -->|POST /generate| Gateway[FastAPI Backend :8000]
 
-### Phase 4: Dynamic Sandbox & Execution (Active)
-- [/] Set up E2B / Docker Sandbox connectors (tested connectivity using `test_e2b.py`).
-- [ ] Connect the Reviewer Agent to actively execute code in the sandbox during generation rather than returning mock results.
-- [ ] Capture execution logs/errors and feed stderr back to the Coder Agent for iterative self-healing.
+    subgraph Cognitive Layer - LangGraph Multi-Agent Workflow
+        Orchestrator[Orchestrator Agent\n• Architectural Plan\n• Structured API Specification]
+        Knowledge[Dual RAG Knowledge Agent\n• ChromaDB Semantic Retrieval\n• React + Express Docs]
+        Coder[Coder Agent\n• Express Server + CRUD Routes\n• React Components & Styles\n• Dual-Mode API Client]
+        Reviewer[Reviewer & Auto-Healer Agent\n• Static Syntax & Route Check\n• Runtime Guard Injection\n• Self-Healing Feedback Loop]
+    end
 
-### Phase 5: Hosting & Production Deployments (Next Steps)
-- [ ] Connect Orchestrator to Vercel/Netlify hosting APIs.
-- [ ] Return live preview URLs of completed applications directly to the interactive Next.js editor.
+    subgraph LLM Resilience Engine
+        LLMFactory[Resilient LLM Factory]
+        Groq[Primary: Groq Cloud\nGPT-OSS-20b / Llama-3.3-70b\nAutomated Backoff Retry]
+        Gemini[Fallback: Google Gemini\nGemini 3.6 Flash]
+    end
+
+    subgraph Knowledge & Vector Store
+        Chroma[(ChromaDB Vector Store\nall-MiniLM-L6-v2 Embeddings)]
+        ReactDocs[React 19 Official Docs]
+        ExpressDocs[Express & REST Best Practices]
+    end
+
+    Gateway --> Orchestrator
+    Orchestrator --> Knowledge
+    Knowledge <--> Chroma
+    ReactDocs --> Chroma
+    ExpressDocs --> Chroma
+    Knowledge --> Coder
+    Coder --> Reviewer
+    Reviewer -->|If Errors & Iterations < 3| Coder
+    Reviewer --> Gateway
+
+    Orchestrator -.-> LLMFactory
+    Coder -.-> LLMFactory
+    LLMFactory --> Groq
+    Groq -.->|On 429/Failure| Gemini
+
+    Gateway -->|Full-Stack Files & Specs| UI
+    UI --> Sandpack[Live React Sandpack Preview]
+    UI --> ApiInspector[REST API Test Console]
+    UI --> ZipExport[ZIP Bundle Exporter]
+```
+
+---
+
+## 💻 Tech Stack
+
+| Layer | Technology | Description |
+|---|---|---|
+| **Frontend Studio** | Next.js 16 (App Router), React 19, TypeScript | High-performance developer interface and application shell |
+| **Styling** | TailwindCSS + Modern Glassmorphism CSS | Rich dark-mode UI with smooth micro-interactions and badges |
+| **Code Preview** | `@codesandbox/sandpack-react` | In-browser isolated React bundler and virtual file system |
+| **Icons & UI** | `lucide-react`, `canvas-confetti` | Sleek modern iconography and interactive feedback |
+| **Export Engine** | `jszip` | Generates runnable full-stack zip distributions on the fly |
+| **Backend Gateway** | FastAPI, Uvicorn (Python 3.10+) | High-throughput async REST server running on port 8000 |
+| **Agent Framework** | LangGraph & LangChain | Directed cyclical multi-agent graph with conditional self-healing |
+| **Primary LLM** | Groq Cloud (`openai/gpt-oss-20b`, `llama-3.3-70b`) | Lightning-fast inference (sub-3s generation) with automated backoff |
+| **Fallback LLM** | Google Gemini (`gemini-3.6-flash`) | Deep reasoning model with large context window fallback |
+| **Vector Database** | ChromaDB | Persistent local semantic store for technical documentation |
+| **Embeddings** | HuggingFace (`sentence-transformers/all-MiniLM-L6-v2`) | Local, zero-cost semantic embedding pipeline |
 
 ---
 
@@ -42,116 +91,138 @@ We are implementing this project in structured phases. Below is the current impl
 
 ```
 agentic-webdev/
-├── backend/                  # Python FastAPI Backend & LangGraph Agent Pipeline
-│   ├── agents/               # Cognitive Agent Nodes
-│   │   ├── orchestrator.py   # Technical plans breakdown (Gemini)
-│   │   ├── knowledge.py      # Retrieves context from vector DB (RAG)
-│   │   ├── coder.py          # Generates codebase files structure (JSON)
-│   │   └── reviewer.py       # Validates output / Mock Debugger stub
-│   ├── chroma_db/            # Chroma Vector DB storing chunked documentation
-│   ├── main.py               # FastAPI gateway server running on port 8000
-│   ├── graph.py              # Compiled LangGraph Workflow connecting the nodes
-│   ├── state.py              # LangGraph AgentState definitions
-│   ├── rag_ingest.py         # Loads/splits MD, MDX, PDF documentation into ChromaDB
-│   ├── requirements.txt      # Python dependencies list
-│   └── test_*.py             # CLI scripts for testing API, graph, E2B
-├── frontend/                 # Next.js Front-end App & Monaco Editor Sandbox Workspace
+├── backend/                         # Python FastAPI Backend & Agent Orchestrator
+│   ├── agents/                      # Cognitive LangGraph Agents
+│   │   ├── orchestrator.py          # Plans architecture & extracts structured REST API specs
+│   │   ├── knowledge.py             # Dual-domain RAG retrieval (React + Express)
+│   │   ├── coder.py                 # Generates full-stack files (Express server + React UI)
+│   │   └── reviewer.py              # Validates syntax & auto-heals React/package code
+│   ├── chroma_db/                   # Chroma Vector DB storing chunked documentation
+│   ├── llm_factory.py               # Multi-provider ResilientLLM (Groq + Gemini fallback)
+│   ├── graph.py                     # Compiled LangGraph cyclical state workflow
+│   ├── state.py                     # TypedDict state definition (AgentState)
+│   ├── main.py                      # FastAPI application with CORS & /generate endpoint
+│   ├── rag_ingest.py                # React documentation chunking and embedding
+│   ├── ingest_backend_docs.py       # Express & REST architecture knowledge ingestion
+│   ├── requirements.txt             # Python dependencies
+│   └── test_fullstack.py            # CLI verification script for end-to-end generation
+├── frontend/                        # Next.js Full-Stack Developer Studio
 │   ├── src/
-│   │   ├── app/
-│   │   │   ├── page.tsx      # Main Page with editor workspace & AI developer chat
-│   │   │   └── layout.tsx    # General wrapper layout
-│   │   └── components/
-│   │       └── Editor.tsx    # Custom Monaco Code Editor component
-│   └── package.json          # Node dependencies (Next.js, Sandpack, Monaco)
-├── knowledge_base/           # Repository source markdown/PDF files for RAG ingestion
-│   └── react.dev/            # Cloned local repository of React dev documentation
-├── architecture_and_workflow.md # Architectural design specifications
-└── implementation_plan.md    # Initial implementation checklist & verification plan
+│   │   └── app/
+│   │       ├── page.tsx             # Studio interface: Chat, Sandpack, API Tester, Plan
+│   │       ├── layout.tsx           # Application layout wrapper
+│   │       └── globals.css          # Design system & dark mode styles
+│   ├── package.json                 # Frontend dependencies (Next.js, Sandpack, Lucide, JSZip)
+│   └── tsconfig.json                # TypeScript configuration
+├── knowledge_base/                  # Source Markdown documentation for RAG ingestion
+│   ├── react.dev/                   # Cloned official React documentation
+│   └── backend/                     # Curated Express.js, REST, CORS, and Data Store guides
+├── README.md                        # Project documentation and guide
+└── .env                             # Environment variables & API keys
 ```
 
 ---
 
-## 🛠️ System Architecture
+## 🚦 Roadmap & Implementation Status
 
-```mermaid
-graph TD
-    User([User]) --> |"Natural Language Prompt"| UI[IDE Interface\nNext.js + Monaco]
-    UI --> Orchestrator
-    
-    subgraph Cognitive Layer - LangGraph Agents
-        Orchestrator[Orchestrator Agent\n'The Manager']
-        Knowledge[RAG-Knowledge Agent\n'The Researcher']
-        Coder[Coder Agent\n'The Developer']
-        Reviewer[Reviewer/Debugger Agent\n'The QA']
-    end
-    
-    subgraph Infrastructure & Memory
-        VectorDB[(Vector DB\nChromaDB)]
-        Sandbox[Execution Sandbox\nDocker/E2B]
-    end
-    
-    Orchestrator --> |Task Breakdown| Knowledge
-    Orchestrator --> |Assigns Tasks| Coder
-    
-    Knowledge <--> |Query & Retrieve Docs| VectorDB
-    Knowledge --> |Gold Standard Snippets| Coder
-    
-    Coder --> |Writes Code| Sandbox
-    Sandbox --> |Execution Logs & Errors| Reviewer
-    Reviewer --> |Self-Healing Loops| Coder
-    Reviewer --> |Approval| Orchestrator
-    
-    Orchestrator --> |Live Preview Code| UI
-```
+### Phase 1: Foundations & Scaffolding (Completed)
+- [x] Initialized dual-workspace structure (`backend/` and `frontend/`).
+- [x] Configured Next.js 16 with TailwindCSS and Sandpack React workspace.
+- [x] Configured FastAPI backend with CORS middleware and Uvicorn hot-reload.
 
-1. **Orchestrator Agent:** The "Manager" that handles user intent, splits requirements into code tasks, and maintains overall state.
-2. **RAG-Knowledge Agent:** The "Researcher" that fetches the correct syntax blocks and APIs from the local Vector DB.
-3. **Coder Agent:** The "Developer" that builds raw React and HTML/JS file structures in a structured format.
-4. **Reviewer Agent:** The "QA" that runs the generated code inside a sandbox, captures issues, and teaches the Coder how to fix them recursively.
+### Phase 2: LangGraph Core Flow (Completed)
+- [x] Implemented cyclic LangGraph workflow with `AgentState`.
+- [x] Built Orchestrator, Knowledge, Coder, and Reviewer agent nodes.
+- [x] Configured conditional feedback loop (`should_continue`) for self-healing.
+
+### Phase 3: Dual RAG Knowledge Base (Completed)
+- [x] Ingested React 19 documentation into local ChromaDB.
+- [x] Created curated Express.js and REST architecture guides in `knowledge_base/backend/`.
+- [x] Ingested backend guides into ChromaDB with HuggingFace sentence transformers.
+- [x] Connected Knowledge Agent to retrieve both frontend and backend documentation simultaneously.
+
+### Phase 4: Full-Stack Generation & Studio Experience (Completed)
+- [x] Upgraded Coder Agent to produce complete Express.js servers, seed stores, and REST endpoints.
+- [x] Engineered dual-mode `/services/api.js` client for seamless preview and local server execution.
+- [x] Built interactive **Backend REST API Inspector** with live endpoint testing, latency counter, and payload inspection.
+- [x] Built **ZIP Project Exporter** producing organized `/server` and `/client` projects.
+
+### Phase 5: Reliability & Runtime Immunity (Completed)
+- [x] Integrated Groq Cloud as high-speed primary LLM (`openai/gpt-oss-20b`) with smart backoff retry.
+- [x] Implemented automatic fallback to Google Gemini (`gemini-3.6-flash`).
+- [x] Built **3-Layer Defensive Immunity System** against `Cannot read properties of undefined (reading 'map')`.
+- [x] Added robust `parsePackageJson` to handle comments, single quotes, and code blocks safely.
+
+### Phase 6: Cloud Deployment & One-Click Hosting (Next Steps)
+- [ ] Connect Orchestrator to Vercel/Netlify for instant frontend cloud deploys.
+- [ ] Connect backend to Render/Fly.io APIs for containerized Express deployments.
 
 ---
 
-## 💻 Tech Stack
-
-- **Frontend:** Next.js (React), TailwindCSS, CodeSandbox Sandpack (for in-browser preview & file explorer)
-- **Backend Framework:** FastAPI (Python 3.10+)
-- **Agent Orchestration:** LangGraph & LangChain
-- **AI Models:** Gemini 2.5 Flash (via `langchain-google-genai`)
-- **Knowledge Memory:** ChromaDB (Vector Database) for document retrieval
-
----
-
-## 🏃 Run Local Setup
+## 🏃 Quickstart & Local Setup
 
 ### Prerequisites
-- Node.js (v18+)
-- Python (v3.10+)
+- **Node.js**: v18.0.0 or higher
+- **Python**: v3.10 or higher
+- API Keys:
+  - **Groq API Key** (Free tier available at [console.groq.com](https://console.groq.com))
+  - **Google Gemini API Key** (Free tier at [aistudio.google.com](https://aistudio.google.com))
 
-### 1. Configure Environments
-Create a `.env` file at the root directory of the project:
+### 1. Configure Environment Variables
+Create a `.env` file in the root directory and in `backend/.env`:
 ```env
-GOOGLE_API_KEY=your_gemini_api_key
-HF_TOKEN=your_huggingface_token
-E2B_API_KEY=your_optional_e2b_api_key
+# Primary LLM (Groq Cloud)
+GROQ_API_KEY=gsk_your_groq_api_key_here
+GROQ_MODEL=openai/gpt-oss-20b
+
+# Fallback LLM (Google Gemini)
+GOOGLE_API_KEY=your_gemini_api_key_here
+LLM_MODEL=gemini-3.6-flash
+
+# Optional HuggingFace Token
+HF_TOKEN=your_huggingface_token_optional
 ```
 
-### 2. Launch Backend Server
+### 2. Start the Backend API Server
 ```bash
 cd backend
 python -m venv venv
+
 # On Windows:
 .\venv\Scripts\Activate.ps1
-# On Unix:
+# On macOS/Linux:
 source venv/bin/activate
 
 pip install -r requirements.txt
-uvicorn main:app --reload --port 8000
+
+# (Optional) Seed the Vector Knowledge Base if not already present:
+python ingest_backend_docs.py
+
+# Launch FastAPI on port 8000:
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-### 3. Launch Frontend Server
+### 3. Start the Frontend Studio
+In a new terminal:
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
-Open [http://localhost:3000](http://localhost:3000) to view the web application.
+
+Open [http://localhost:3000](http://localhost:3000) in your browser to begin creating full-stack applications!
+
+---
+
+## 💡 Example Prompts to Try
+
+* **Expense Tracker:**
+  > *"Personal Expense & Budget Tracker with spending categories, monthly allowance progress bars, expense logging form, and category breakdown"*
+* **Kanban Board:**
+  > *"Team Sprint & Kanban Board with status columns (Todo, In Progress, Review, Done), priority tags, assignee avatars, and task creation"*
+* **Crypto Watchlist:**
+  > *"Crypto & Stock Portfolio Watchlist with simulated price feeds, profit/loss calculations, buy/sell logger, and asset distribution"*
+* **E-Commerce Catalog:**
+  > *"Sneaker Marketplace catalog with category filters, price range slider, cart drawer, and checkout simulation"*
+* **Developer Console:**
+  > *"API Key & Webhook Management Console with token generation, usage quotas, toggle permissions, and request activity logs"*

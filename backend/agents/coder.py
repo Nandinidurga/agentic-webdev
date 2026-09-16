@@ -1,54 +1,144 @@
 import json
-from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_core.messages import SystemMessage, HumanMessage
 import re
+from langchain_core.messages import SystemMessage, HumanMessage
+from llm_factory import get_llm
 
 def coder_node(state):
-    print("--- CODER AGENT ---")
-    plan = state.get("plan", "")
-    context = state.get("context", "")
+    print("--- CODER AGENT (FULL-STACK) ---")
+    plan = state.get("plan", "")[:1800]
+    context = state.get("context", "")[:1200]
     errors = state.get("errors", "")
+    api_spec = state.get("api_spec", [])
     
-    llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash") # Switched to flash
+    llm = get_llm()
     
-    system_prompt = f"""You are the Coder Agent. Your job is to write the actual code for the web application based on the plan.
-Context from RAG Knowledge Base: {context}
-
-Output a strictly valid JSON object where the keys are the file paths and the values are the complete code content.
-CRITICAL INSTRUCTIONS FOR SANDPACK COMPATIBILITY:
-1. The main React component MUST be named '/App.js'. Do not use .jsx.
-2. You can create other components like '/components/Counter.js'.
-3. You can create CSS like '/styles.css' (and import it in App.js).
-4. DO NOT generate 'index.html', 'main.jsx', 'vite.config.js' or any build tools.
-5. If you need third-party libraries (e.g. 'react-router-dom', 'axios', 'framer-motion'), you MUST generate a '/package.json' file with a valid JSON object containing a "dependencies" key mapping package names to "*".
-6. Assume 'react', 'react-dom', 'lucide-react', and 'tailwindcss' are already installed.
-
-DO NOT output any markdown blocks like ```json. Output ONLY the raw JSON object."""
-
-    prompt = f"Plan:\n{plan}\n\nPrevious Errors:\n{errors}\n\nGenerate the JSON file structure."
+    api_spec_str = json.dumps(api_spec, indent=2) if api_spec else "Derive REST endpoints based on plan."
     
+    system_prompt = f"""You are the Principal Full-Stack Engineer Agent.
+Your job is to generate BOTH the complete Backend code and the complete Frontend code for the web application based on the architectural plan and API specification.
+
+Key Technical Context:
+{context}
+
+REQUIRED FILE STRUCTURE (Output a single, strictly valid JSON object where keys are file paths and values are complete code strings. Keep implementations compact, elegant, and concise so the JSON closes cleanly):
+
+1. BACKEND FILES:
+   - `/server.js`: Complete Node.js / Express.js server.
+     * MUST require 'express' and 'cors', and use `app.use(cors())` and `app.use(express.json())`.
+     * MUST define in-memory storage array/object initialized with 3-5 rich, domain-specific seed items.
+     * MUST implement all REST endpoints from the API specification (GET all, GET by id, POST create, PUT/PATCH update, DELETE).
+     * MUST include `GET /api/health` returning `{{ status: "ok", uptime: process.uptime() }}`.
+     * MUST start the server: `const PORT = process.env.PORT || 5000; app.listen(PORT, () => console.log('Server running on port ' + PORT));`.
+   - `/server/package.json`: Valid JSON package descriptor with "dependencies": {{ "express": "^4.19.2", "cors": "^2.8.5" }} and "scripts": {{ "start": "node server.js" }}.
+
+2. FRONTEND SERVICES:
+   - `/services/api.js`: The central API client module used by React components.
+     * Export an `api` object or async helper functions for every endpoint (e.g. `getItems()`, `createItem()`, `updateItem()`, `deleteItem()`).
+     * CRITICAL DUAL-MODE LOGIC: Maintain a top-level in-memory mock store initialized with the domain seed items (e.g. `let mockItems = [...seedData];`). In every async function, attempt `fetch('http://localhost:5000' + endpoint)`. If fetch fails (or `!res.ok`), catch the error and ALWAYS RETURN the mock data (e.g. `return [...mockItems];`). NEVER return undefined from any API function!
+     * This guarantees the frontend is 100% interactive inside the live Sandpack browser preview, while simultaneously providing true production backend connectivity!
+
+3. FRONTEND UI (SANDPACK COMPATIBLE):
+   - `/App.js`: Complete, rich React application component.
+     * MUST be named `/App.js` (not .jsx or .tsx).
+     * MUST import `./styles.css` and `./services/api.js`.
+     * CRITICAL REACT IMMUNITY RULES:
+       - ALWAYS initialize collection state with an empty array: `const [items, setItems] = useState([]);` (NEVER `useState()`, `useState(null)`, or `useState(undefined)`).
+       - ALWAYS render collections defensively: `(items || []).map(...)` and `(items || []).filter(...)`.
+       - ALWAYS format numbers defensively: `(Number(item.amount) || 0).toFixed(2)` so null, undefined, or string values never crash.
+     * Build a rich interactive UI with search/filter, item creation/editing forms, data cards/tables, and action buttons.
+     * Display live feedback: badge showing "Backend API Connected" or "Preview Store Active", loading spinners, and alerts.
+   - `/styles.css`: Modern CSS styling with smooth transitions, modern colors, card styles, and button effects.
+   - `/package.json`: Client package.json specifying dependencies: {{ "dependencies": {{ "lucide-react": "latest" }} }}.
+
+4. DOCUMENTATION:
+   - `/README.md`: Quickstart instructions on running backend (`cd server && npm install && npm start`) and frontend (`npm install && npm start`).
+
+RULES:
+- Output strictly valid, parsable JSON ONLY.
+- Keys MUST be file paths starting with `/`.
+- DO NOT wrap the output in markdown code blocks like ```json ... ```. Output raw JSON starting with `{{` and ending with `}}`.
+- Do NOT generate HTML files or Vite config files."""
+
+    prompt = f"""Plan & Requirements:\n{plan}\n\nTarget API Specification:\n{api_spec_str}\n\nPrevious Reviewer Errors:\n{errors}\n\nGenerate the complete Full-Stack JSON file structure now:"""
+
     messages = [
         SystemMessage(content=system_prompt),
         HumanMessage(content=prompt)
     ]
-    
+
     response = llm.invoke(messages)
-    
-    # Try to parse the JSON
-    content = response.content.strip()
-    # Robustly extract JSON block
+    raw_content = response.content
+    if isinstance(raw_content, list):
+        raw_content = "\n".join([c if isinstance(c, str) else c.get("text", str(c)) for c in raw_content])
+    content = str(raw_content).strip()
+
+    # If content is empty or lacks JSON brackets, check reasoning_content (common for reasoning models)
+    if (not content or '{' not in content) and hasattr(response, 'additional_kwargs'):
+        reasoning = response.additional_kwargs.get('reasoning_content', '')
+        if '{' in reasoning:
+            print("Coder Agent: Extracted file structure from model reasoning channel.", flush=True)
+            content = reasoning
+
+    # Robust JSON extraction
+    # Strip any markdown code fences if present
+    content = re.sub(r"^```(?:json)?\s*", "", content)
+    content = re.sub(r"\s*```$", "", content)
+
     start_idx = content.find('{')
     end_idx = content.rfind('}')
-    
+
     if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
         content = content[start_idx:end_idx+1]
-        
+
+    files = {}
+    code_status = ""
     try:
-        files = json.loads(content)
-        code = "JSON generated successfully."
+        files = json.loads(content, strict=False)
+        code_status = f"Successfully generated {len(files)} full-stack files."
     except json.JSONDecodeError as e:
-        print(f"Failed to decode JSON: {e}")
-        files = {}
-        code = content
-        
-    return {"code": code, "files": files}
+        print(f"JSON decode failed on primary attempt: {e}")
+        # Try to fix common JSON issues like trailing commas or unescaped control characters
+        cleaned = re.sub(r',\s*([\]}])', r'\1', content)
+        try:
+            files = json.loads(cleaned, strict=False)
+            code_status = f"Successfully generated {len(files)} files after JSON sanitization."
+        except Exception as e2:
+            print(f"JSON decode failed after sanitization: {e2}")
+            # Resilient Fallback: Regex extraction for file mapping
+            pattern = r'"(/[^"]+)":\s*"([\s\S]*?)(?="\s*,\s*"/[^"]+"\s*:|"\s*\})'
+            matches = re.findall(pattern, content)
+            if matches:
+                for fpath, fbody in matches:
+                    unescaped = fbody.replace('\\"', '"').replace('\\n', '\n')
+                    files[fpath] = unescaped
+                code_status = f"Successfully extracted {len(files)} files via pattern matcher."
+                print(f"Resilient Pattern Matcher recovered {len(files)} files.")
+            else:
+                code_status = f"Failed to parse JSON: {e2}"
+                files = {}
+
+    # Separate into frontend_files and backend_files
+    backend_files = {}
+    frontend_files = {}
+
+    for path, code_content in files.items():
+        norm_path = path if path.startswith('/') else f"/{path}"
+        lower = norm_path.lower()
+        if lower.startswith('/server') or 'server.js' in lower:
+            backend_files[norm_path] = code_content
+        elif lower == '/readme.md':
+            # Include in both or root
+            backend_files[norm_path] = code_content
+            frontend_files[norm_path] = code_content
+        else:
+            frontend_files[norm_path] = code_content
+
+    print(f"Coder Agent generated {len(backend_files)} backend files and {len(frontend_files)} frontend files.")
+
+    return {
+        "code": code_status,
+        "files": files,
+        "backend_files": backend_files,
+        "frontend_files": frontend_files
+    }
+

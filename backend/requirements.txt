@@ -9,3 +9,4 @@ pypdf
 python-dotenv
 e2b-code-interpreter
 langchain-google-genai
+langchain-groq

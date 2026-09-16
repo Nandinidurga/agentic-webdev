@@ -26,7 +26,7 @@ class PromptRequest(BaseModel):
     prompt: str
 
 @app.post("/generate")
-async def generate_app(request: PromptRequest):
+def generate_app(request: PromptRequest):
     try:
         from graph import create_graph
         graph = create_graph()
@@ -41,7 +41,11 @@ async def generate_app(request: PromptRequest):
             "plan": result.get("plan"),
             "code": result.get("code"),
             "files": result.get("files", {}),
+            "backend_files": result.get("backend_files", {}),
+            "frontend_files": result.get("frontend_files", {}),
+            "api_spec": result.get("api_spec", []),
             "execution_result": result.get("execution_result"),
+            "backend_test_results": result.get("backend_test_results"),
             "errors": result.get("errors")
         }
     except Exception as e:

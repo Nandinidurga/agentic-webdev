@@ -1,61 +1,98 @@
-# Project Implementation Plan: Agent-based LLM for Web Application Development
+# Implementation Plan: Agentic IDE Full-Stack Web Development Studio
 
-This document outlines the step-by-step implementation plan for building the Agent-based Web Development platform based on the `architecture_and_workflow.md` design.
+This document tracks the technical implementation, architectural evolution, and verification milestones of the Agentic Web Development platform based on the upgraded [`architecture_and_workflow.md`](file:///e:/agentic-webdev/architecture_and_workflow.md).
 
-## User Review Required
+---
 
-> [!IMPORTANT]
-> **RAG Knowledge Base Source:** The plan proposes cloning community-curated GitHub repositories (like `HarshVadaliya/tech-books-library` or `EbookFoundation/free-programming-books`) to obtain Web Development PDFs for the RAG knowledge base. Please confirm if this approach is acceptable, or if you have specific internal PDFs/repositories you prefer to use.
+## 📌 Implementation Status Overview
 
-> [!CAUTION]
-> **Execution Sandbox:** The architecture requires a sandbox for the Coder Agent to test code safely. The plan assumes we will set up a local **Docker-based** sandbox for initial development. Please confirm if you have Docker installed and running on your system, or if you prefer using a cloud sandbox like E2B.
+| Phase | Description | Status | Verification |
+|:---|:---|:---|:---|
+| **Phase 1** | Foundation & Project Scaffolding | **Completed** | Clean directory separation (`backend/`, `frontend/`, `knowledge_base/`) |
+| **Phase 2** | LangGraph Cyclic Agent State Machine | **Completed** | `graph.py` with `AgentState` cyclical self-healing loop |
+| **Phase 3** | Dual-Domain RAG Vector Knowledge Base | **Completed** | ChromaDB populated with React 19 docs + Express.js backend guides |
+| **Phase 4** | Full-Stack Express + React Code Generation | **Completed** | Coder agent outputs `/server.js`, `/App.js`, and `/services/api.js` |
+| **Phase 5** | Multi-Provider LLM Resilience & Runtime Immunity | **Completed** | Groq primary + Gemini fallback, 3-layer immunity against `.map` errors |
+| **Phase 6** | Automated Cloud Hosting & Production Deploy | **Planned** | Direct API deployment to Vercel/Netlify and Render |
 
-## Open Questions
+---
 
-1. **LLM Provider:** We are using Gemini 2.5 Flash as per the architecture. Do you have an API key ready, and should we store it in a `.env` file in the root directory?
-2. **Frontend Styling:** Should the Next.js frontend (the IDE Interface) use standard CSS, or would you like to incorporate Tailwind CSS for rapid styling (despite the general guideline preferring Vanilla CSS, Tailwind is common for Next.js dashboards)?
+## 🛠️ Detailed Phase Breakdown
 
-## Proposed Changes
+### Phase 1: Foundation & Project Scaffolding (Completed)
+- [x] Initialized dual-workspace structure: `backend/` (Python FastAPI) and `frontend/` (Next.js 16).
+- [x] Configured environment files (`.env` in root and `backend/.env`).
+- [x] Established Next.js frontend with TailwindCSS, Lucide icons, and CodeSandbox Sandpack.
 
-We will construct the project in four main phases.
+### Phase 2: LangGraph Core Flow (Completed)
+- [x] Defined `AgentState` TypedDict in [`backend/state.py`](file:///e:/agentic-webdev/backend/state.py) to manage prompt, plan, API spec, backend files, frontend files, validation logs, and iteration counters.
+- [x] Built cyclic state graph in [`backend/graph.py`](file:///e:/agentic-webdev/backend/graph.py) with conditional transition `should_continue` (allowing up to 3 iterative self-healing attempts).
+- [x] Implemented agent node files in [`backend/agents/`](file:///e:/agentic-webdev/backend/agents/).
 
-### Phase 1: Knowledge Base Setup (RAG)
-We will create a local repository for our RAG data.
-- **[NEW]** `knowledge_base/` directory.
-- **Action:** Clone/download web development PDF resources (React, Next.js, Python, CSS) from open-source GitHub repositories into this folder.
+### Phase 3: Dual-Domain RAG Vector Knowledge Base (Completed)
+- [x] Cloned and ingested official React documentation via [`backend/rag_ingest.py`](file:///e:/agentic-webdev/backend/rag_ingest.py).
+- [x] Created curated backend architecture documentation in `knowledge_base/backend/`:
+  - `express_core_and_routing.md`: Express routing conventions, middleware order, and error handling.
+  - `backend_data_store_and_models.md`: In-memory and document-based data modeling and UUID generation.
+  - `cors_and_security.md`: CORS configuration for cross-origin local dev and Sandpack compatibility.
+  - `rest_api_conventions_and_status_codes.md`: RESTful status codes and payload structure best practices.
+  - `dual_mode_client_architecture.md`: Specification for hybrid local-fetch and in-memory mock client.
+- [x] Built [`backend/ingest_backend_docs.py`](file:///e:/agentic-webdev/backend/ingest_backend_docs.py) using HuggingFace `sentence-transformers/all-MiniLM-L6-v2` embeddings for zero-cost, local persistent vectorization in ChromaDB.
+- [x] Connected [`backend/agents/knowledge.py`](file:///e:/agentic-webdev/backend/agents/knowledge.py) to perform dual-domain queries (2 frontend chunks + 2 backend chunks per prompt).
 
-### Phase 2: Project Scaffolding
-Setting up the core directories for the Backend (Agents) and Frontend (IDE UI).
+### Phase 4: Full-Stack Generation & Studio Experience (Completed)
+- [x] Upgraded [`backend/agents/orchestrator.py`](file:///e:/agentic-webdev/backend/agents/orchestrator.py) to derive both technical blueprints and structured REST API endpoint arrays (`api_spec`).
+- [x] Upgraded [`backend/agents/coder.py`](file:///e:/agentic-webdev/backend/agents/coder.py) to generate unified full-stack JSON trees:
+  - Node.js / Express backend (`/server.js`, `/server/package.json`).
+  - Dual-mode API service layer (`/services/api.js`).
+  - React frontend (`/App.js`, `/styles.css`, `/package.json`).
+- [x] Upgraded [`backend/agents/reviewer.py`](file:///e:/agentic-webdev/backend/agents/reviewer.py) to validate route coverage against `api_spec`, verify CORS, and check for server startup.
+- [x] Upgraded [`frontend/src/app/page.tsx`](file:///e:/agentic-webdev/frontend/src/app/page.tsx) with:
+  - **Backend REST API Tab:** Real-time endpoint testing tool (GET, POST, PUT, DELETE) with latency measurement, status indicators, and payload inspectors.
+  - **Server Code Viewer:** Full Express.js server inspection with copy-to-clipboard functionality.
+  - **Full-Stack ZIP Exporter:** Generates runnable `.zip` bundles with structured `/server` and `/client` directories using `JSZip`.
 
-#### Backend (Python / LangGraph)
-- **[NEW]** `backend/` directory.
-- **[NEW]** `backend/requirements.txt`: (langgraph, chromadb, fastapi, google-generativeai, langchain, pypdf).
-- **[NEW]** `backend/main.py`: FastAPI entry point.
-- **[NEW]** `backend/rag_ingest.py`: Script to process PDFs from `knowledge_base/` and store them in ChromaDB.
+### Phase 5: Multi-Provider LLM Resilience & Runtime Immunity (Completed)
+- [x] Engineered [`backend/llm_factory.py`](file:///e:/agentic-webdev/backend/llm_factory.py):
+  - Primary provider: **Groq Cloud** (`openai/gpt-oss-20b` or `llama-3.3-70b-versatile`) with automated per-second backoff retry for TPM windows.
+  - Fallback provider: **Google Gemini** (`gemini-3.6-flash`) for automated failover during provider outages.
+- [x] Implemented **3-Layer Defensive Immunity System** against `Cannot read properties of undefined (reading 'map')`:
+  - **Layer 1 (Client-Side Sandpack Sanitizer):** Excludes server files from Sandpack preview, auto-initializes `useState([])`, wraps bare `.map()`, `.filter()`, `.reduce()`, guards `.toFixed()`, and includes robust `parsePackageJson`.
+  - **Layer 2 (Reviewer Auto-Healer):** Server-side regex transformer that automatically repairs uninitialized state, bare array transformations, and single-quoted `package.json` before API response.
+  - **Layer 3 (Coder Prompt Hardening):** Strict directives enforcing collection initialization, defensive rendering, and fallback mock returns in `/services/api.js`.
 
-#### Frontend (Next.js)
-- **[NEW]** `frontend/` directory.
-- **Action:** Run `npx create-next-app@latest frontend` to scaffold the Next.js application.
-- **[NEW]** `frontend/components/Editor.jsx`: Monaco Editor component.
+---
 
-### Phase 3: Core Agent Implementation
-Implementing the "Brains" in the backend using LangGraph.
-- **[NEW]** `backend/agents/orchestrator.py`
-- **[NEW]** `backend/agents/knowledge.py`
-- **[NEW]** `backend/agents/coder.py`
-- **[NEW]** `backend/agents/reviewer.py`
-- **[NEW]** `backend/graph.py`: LangGraph state machine linking the agents together.
+## 🔮 Phase 6: Cloud Deployment & Hosting (Next Steps)
 
-### Phase 4: Sandbox Environment
-Setting up the secure execution "Hands".
-- **[NEW]** `sandbox/Dockerfile`: A container image with Node.js and Python pre-installed for the Coder Agent to run generated code.
+### Objectives
+1. **Frontend Cloud Deployment:** Integrate Vercel or Netlify API to deploy generated React applications directly from the studio.
+2. **Backend Cloud Deployment:** Containerize the generated Express backend via Dockerfile generation and trigger deployment on Render or Fly.io.
+3. **Live Public URL Badge:** Display production live URLs directly inside the Next.js studio header alongside the Sandpack preview.
 
-## Verification Plan
+---
 
-### Automated Tests
-- Run `python backend/rag_ingest.py` to ensure PDFs are successfully chunked and loaded into ChromaDB without errors.
-- Run `npm run lint` and `npm run build` in the frontend directory to ensure the Next.js app is structurally sound.
+## 🧪 Verification & Test Suite
 
-### Manual Verification
-- Start the FastAPI backend and query the RAG endpoint manually to see if relevant context from the PDFs is returned.
-- Start the Next.js frontend (`npm run dev`) and verify the UI loads correctly and can send a prompt to the backend.
+### Automated Pipeline Verification
+Run the end-to-end full-stack verification script:
+```powershell
+cd backend
+.\venv\Scripts\Activate.ps1
+python test_fullstack.py
+```
+**Expected Output:**
+* Orchestrator generates architectural plan and 5-10 REST endpoints.
+* Knowledge agent retrieves 4 documentation chunks from ChromaDB.
+* Coder generates 7-8 files across backend and frontend.
+* Reviewer Auto-Healer validates syntax, injects runtime guards, and reports `exit code 0`.
+
+### Manual Browser Studio Verification
+1. Start backend: `uvicorn main:app --reload --port 8000`
+2. Start frontend: `npm run dev` in `frontend/`
+3. Open `http://localhost:3000`
+4. Enter prompt: *"Personal Expense & Budget Tracker"*
+5. Verify:
+   - Live Sandpack preview renders data table and forms without `.map` or `toFixed` errors.
+   - Click **Backend REST API** tab, select an endpoint, and click **Test Endpoint** to inspect simulated/live response.
+   - Click **Export Project** and verify the downloaded `.zip` contains both `/server` and `/client` projects.

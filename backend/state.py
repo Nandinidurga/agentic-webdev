@@ -1,11 +1,16 @@
-from typing import TypedDict, List, Dict, Any
+from typing import TypedDict, List, Dict, Any, Optional
 
-class AgentState(TypedDict):
+class AgentState(TypedDict, total=False):
     prompt: str
     plan: str
+    api_spec: List[Dict[str, Any]]
     context: str
     code: str
+    backend_files: Dict[str, str]
+    frontend_files: Dict[str, str]
     files: Dict[str, str]
     execution_result: str
+    backend_test_results: str
     errors: str
     iteration: int
+
