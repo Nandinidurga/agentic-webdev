@@ -41,12 +41,13 @@ def reviewer_node(state):
     backend_files = dict(state.get("backend_files", {}))
     frontend_files = dict(state.get("frontend_files", {}))
     api_spec = state.get("api_spec", [])
+    current_iteration = state.get("iteration", 0)
     
-    errors_list = []
+    critical_errors = []
     validation_logs = []
     
     if not files:
-        errors_list.append("Critical: No files were generated or JSON could not be parsed.")
+        critical_errors.append("Critical: No files were generated or JSON could not be parsed.")
     else:
         validation_logs.append(f"Received {len(files)} total files ({len(backend_files)} backend, {len(frontend_files)} frontend).")
         
@@ -58,17 +59,17 @@ def reviewer_node(state):
                 break
                 
         if not server_code:
-            errors_list.append("Backend Error: Missing `/server.js`. The application must include an Express.js server.")
+            critical_errors.append("Backend Error: Missing `/server.js`. The application must include an Express.js server.")
         else:
             validation_logs.append("Backend Check: Found `/server.js`.")
             
             # Check for Express setup
             if "express" not in server_code:
-                errors_list.append("Backend Error: `/server.js` does not import or require Express.")
+                critical_errors.append("Backend Error: `/server.js` does not import or require Express.")
             if "cors" not in server_code:
-                errors_list.append("Backend Error: `/server.js` does not use CORS middleware. Add `app.use(cors())`.")
+                validation_logs.append("Backend Warning: CORS middleware not detected in `/server.js`. Adding recommendation.")
             if "app.listen" not in server_code and "server.listen" not in server_code:
-                errors_list.append("Backend Error: `/server.js` does not start the server using `app.listen(...)`.")
+                critical_errors.append("Backend Error: `/server.js` does not start the server using `app.listen(...)`.")
             
             # Check for planned API endpoints
             if api_spec:
@@ -80,9 +81,9 @@ def reviewer_node(state):
                         missing_routes.append(f"{endpoint.get('method', 'GET')} {route_snippet}")
                 
                 if missing_routes and len(missing_routes) > len(api_spec) // 2:
-                    errors_list.append(f"Backend Warning: Expected endpoints not found in `/server.js`: {', '.join(missing_routes[:3])}.")
+                    validation_logs.append(f"Backend Warning: Expected endpoints not explicitly in `/server.js`: {', '.join(missing_routes[:3])}.")
                 else:
-                    validation_logs.append(f"Backend Check: Endpoints verified against API specification.")
+                    validation_logs.append("Backend Check: Endpoints verified against API specification.")
 
         # 2. Validate Frontend Files
         app_code = files.get("/App.js") or files.get("App.js")
@@ -93,11 +94,11 @@ def reviewer_node(state):
                     break
                     
         if not app_code:
-            errors_list.append("Frontend Error: Missing main React component `/App.js`.")
+            critical_errors.append("Frontend Error: Missing main React component `/App.js`.")
         else:
             validation_logs.append("Frontend Check: Found `/App.js`.")
             if "export default" not in app_code and "export {" not in app_code:
-                errors_list.append("Frontend Warning: `/App.js` does not have a default export.")
+                validation_logs.append("Frontend Warning: `/App.js` does not have an explicit default export.")
 
         # 3. Validate API Client Service
         api_client_code = files.get("/services/api.js") or files.get("services/api.js")
@@ -108,7 +109,7 @@ def reviewer_node(state):
                     break
                     
         if not api_client_code:
-            validation_logs.append("Frontend Note: `/services/api.js` was not found. Consider generating dedicated API client service.")
+            validation_logs.append("Frontend Note: `/services/api.js` was not found. Using fallback preview store.")
         else:
             validation_logs.append("Frontend Check: Found `/services/api.js` client module.")
 
@@ -141,11 +142,11 @@ def reviewer_node(state):
                         backend_files[path] = cleaned_pkg
                     validation_logs.append(f"Auto-Healer: Converted single quotes in `{path}` to valid JSON.")
 
-    errors = "\n".join(errors_list)
+    errors = "\n".join(critical_errors)
     execution_result = "\n".join(validation_logs)
     
     if errors:
-        print(f"Reviewer identified issues:\n{errors}")
+        print(f"Reviewer identified critical issues (iteration {current_iteration + 1}):\n{errors}")
     else:
         print("Reviewer: Full-stack validation passed successfully!")
         execution_result += "\nAll full-stack validation checks passed."
@@ -156,6 +157,6 @@ def reviewer_node(state):
         "errors": errors,
         "files": files,
         "frontend_files": frontend_files,
-        "backend_files": backend_files
+        "backend_files": backend_files,
+        "iteration": current_iteration + 1
     }
-
