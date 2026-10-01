@@ -3,6 +3,19 @@ import re
 from langchain_core.messages import SystemMessage, HumanMessage
 from llm_factory import get_llm
 
+def unescape_json_string(s: str) -> str:
+    """Helper to unescape escaped JSON string content recovered via regex."""
+    replacements = [
+        ('\\\\', '\\'),
+        ('\\"', '"'),
+        ('\\n', '\n'),
+        ('\\r', '\r'),
+        ('\\t', '\t'),
+    ]
+    for old, new in replacements:
+        s = s.replace(old, new)
+    return s
+
 def coder_node(state):
     print("--- CODER AGENT (FULL-STACK) ---")
     plan = state.get("plan", "")[:1800]
@@ -105,24 +118,31 @@ RULES:
         except Exception as e2:
             print(f"JSON decode failed after sanitization: {e2}")
             # Resilient Fallback: Regex extraction for file mapping
-            pattern = r'"(/[^"]+)":\s*"([\s\S]*?)(?="\s*,\s*"/[^"]+"\s*:|"\s*\})'
+            pattern = r'"((?:/)?[a-zA-Z0-9_\-\./]+)":\s*"([\s\S]*?)(?="\s*,\s*"(?:/)?[a-zA-Z0-9_\-\./]+"\s*:|"\s*\})'
             matches = re.findall(pattern, content)
             if matches:
                 for fpath, fbody in matches:
-                    unescaped = fbody.replace('\\"', '"').replace('\\n', '\n')
-                    files[fpath] = unescaped
+                    unescaped = unescape_json_string(fbody)
+                    norm_key = fpath if fpath.startswith('/') else f"/{fpath}"
+                    files[norm_key] = unescaped
                 code_status = f"Successfully extracted {len(files)} files via pattern matcher."
                 print(f"Resilient Pattern Matcher recovered {len(files)} files.")
             else:
                 code_status = f"Failed to parse JSON: {e2}"
                 files = {}
 
+    # Normalize file path keys
+    normalized_files = {}
+    for path, code_content in files.items():
+        norm_path = path if path.startswith('/') else f"/{path}"
+        normalized_files[norm_path] = code_content
+    files = normalized_files
+
     # Separate into frontend_files and backend_files
     backend_files = {}
     frontend_files = {}
 
-    for path, code_content in files.items():
-        norm_path = path if path.startswith('/') else f"/{path}"
+    for norm_path, code_content in files.items():
         lower = norm_path.lower()
         if lower.startswith('/server') or 'server.js' in lower:
             backend_files[norm_path] = code_content
@@ -139,6 +159,6 @@ RULES:
         "code": code_status,
         "files": files,
         "backend_files": backend_files,
-        "frontend_files": frontend_files
+        "frontend_files": frontend_files,
+        "iteration": state.get("iteration", 0)
     }
-
