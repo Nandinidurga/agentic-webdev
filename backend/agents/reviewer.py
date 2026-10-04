@@ -41,7 +41,7 @@ def reviewer_node(state):
     backend_files = dict(state.get("backend_files", {}))
     frontend_files = dict(state.get("frontend_files", {}))
     api_spec = state.get("api_spec", [])
-    current_iteration = state.get("iteration", 0)
+    current_attempt = state.get("attempt", 0)
     
     critical_errors = []
     validation_logs = []
@@ -113,21 +113,23 @@ def reviewer_node(state):
         else:
             validation_logs.append("Frontend Check: Found `/services/api.js` client module.")
 
-        # 4. Auto-heal all frontend React components and services
-        healed_count = 0
-        for path, code in list(files.items()):
-            lower = path.lower()
-            if not lower.startswith('/server') and 'server.js' not in lower:
-                if lower.endswith(('.js', '.jsx', '.tsx', '.ts')):
-                    healed = heal_frontend_code(code)
-                    if healed != code:
-                        files[path] = healed
-                        if path in frontend_files:
-                            frontend_files[path] = healed
-                        healed_count += 1
-                        
-        if healed_count > 0:
-            validation_logs.append(f"Auto-Healer: Injected runtime defensive guards into {healed_count} frontend file(s).")
+        # 4. Optional regex auto-heal for React components (behind HEAL_REGEX=1, default off)
+        heal_regex_enabled = os.getenv("HEAL_REGEX", "0").strip().lower() in ("1", "true")
+        if heal_regex_enabled:
+            healed_count = 0
+            for path, code in list(files.items()):
+                lower = path.lower()
+                if not lower.startswith('/server') and 'server.js' not in lower:
+                    if lower.endswith(('.js', '.jsx', '.tsx', '.ts')):
+                        healed = heal_frontend_code(code)
+                        if healed != code:
+                            files[path] = healed
+                            if path in frontend_files:
+                                frontend_files[path] = healed
+                            healed_count += 1
+                            
+            if healed_count > 0:
+                validation_logs.append(f"Auto-Healer: Injected runtime defensive guards into {healed_count} frontend file(s) via HEAL_REGEX.")
 
         # 5. Auto-heal any package.json files (convert single quotes to valid JSON double quotes)
         for path, code in list(files.items()):
@@ -146,7 +148,7 @@ def reviewer_node(state):
     execution_result = "\n".join(validation_logs)
     
     if errors:
-        print(f"Reviewer identified critical issues (iteration {current_iteration + 1}):\n{errors}")
+        print(f"Reviewer identified critical issues (attempt {current_attempt}):\n{errors}")
     else:
         print("Reviewer: Full-stack validation passed successfully!")
         execution_result += "\nAll full-stack validation checks passed."
@@ -158,5 +160,5 @@ def reviewer_node(state):
         "files": files,
         "frontend_files": frontend_files,
         "backend_files": backend_files,
-        "iteration": current_iteration + 1
+        "attempt": current_attempt
     }
