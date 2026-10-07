@@ -1,5 +1,4 @@
 import os
-from langchain_community.vectorstores import Chroma
 
 def knowledge_node(state):
     print("--- RAG KNOWLEDGE AGENT (FULL-STACK DUAL RETRIEVAL) ---", flush=True)
@@ -12,6 +11,7 @@ def knowledge_node(state):
     
     if os.path.exists(db_path):
         try:
+            from langchain_community.vectorstores import Chroma
             from langchain_huggingface import HuggingFaceEmbeddings
             embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
             vectorstore = Chroma(persist_directory=db_path, embedding_function=embeddings)
@@ -49,4 +49,3 @@ def knowledge_node(state):
         context = "No RAG DB found. Rely on base training."
         
     return {"context": context}
-
