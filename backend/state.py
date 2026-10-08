@@ -13,4 +13,4 @@ class AgentState(TypedDict, total=False):
     backend_test_results: str
     errors: str
     iteration: int
-
+    attempt: int
