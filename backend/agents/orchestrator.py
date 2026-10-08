@@ -103,7 +103,5 @@ Output a clear, professional Markdown document containing the complete full-stac
     
     return {
         "plan": content,
-        "api_spec": api_spec,
-        "iteration": state.get("iteration", 0) + 1
+        "api_spec": api_spec
     }
-
