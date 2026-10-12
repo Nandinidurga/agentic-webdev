@@ -17,7 +17,8 @@ def unescape_json_string(s: str) -> str:
     return s
 
 def coder_node(state):
-    print("--- CODER AGENT (FULL-STACK) ---")
+    current_attempt = state.get("attempt", 0) + 1
+    print(f"--- CODER AGENT (FULL-STACK, ATTEMPT {current_attempt}) ---")
     plan = state.get("plan", "")[:1800]
     context = state.get("context", "")[:1200]
     errors = state.get("errors", "")
@@ -153,12 +154,12 @@ RULES:
         else:
             frontend_files[norm_path] = code_content
 
-    print(f"Coder Agent generated {len(backend_files)} backend files and {len(frontend_files)} frontend files.")
+    print(f"Coder Agent generated {len(backend_files)} backend files and {len(frontend_files)} frontend files (attempt {current_attempt}).")
 
     return {
         "code": code_status,
         "files": files,
         "backend_files": backend_files,
         "frontend_files": frontend_files,
-        "iteration": state.get("iteration", 0)
+        "attempt": current_attempt
     }
