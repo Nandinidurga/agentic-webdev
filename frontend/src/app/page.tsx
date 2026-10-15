@@ -140,11 +140,17 @@ export default function Home() {
     setStatusStep("Planning full-stack architecture...");
     setMessages(prev => [...prev, { role: 'user', text: promptToUse }]);
     
+    const timers: NodeJS.Timeout[] = [];
+    const clearTimers = () => {
+      timers.forEach(t => clearTimeout(t));
+      timers.length = 0;
+    };
+
     try {
       // Step-by-step progress simulation while waiting for LangGraph
-      const stepTimer1 = setTimeout(() => setStatusStep("Synthesizing technical documentation & RAG context..."), 2500);
-      const stepTimer2 = setTimeout(() => setStatusStep("Generating Express.js REST API & React components..."), 6000);
-      const stepTimer3 = setTimeout(() => setStatusStep("Running Reviewer Agent verification & self-healing..."), 12000);
+      timers.push(setTimeout(() => setStatusStep("Synthesizing technical documentation & RAG context..."), 2500));
+      timers.push(setTimeout(() => setStatusStep("Generating Express.js REST API & React components..."), 6000));
+      timers.push(setTimeout(() => setStatusStep("Running Reviewer Agent verification & self-healing..."), 12000));
 
       // Attempt multiple direct backend endpoints
       const host = typeof window !== "undefined" ? window.location.hostname : "localhost";
@@ -183,9 +189,7 @@ export default function Home() {
         }
       }
 
-      clearTimeout(stepTimer1);
-      clearTimeout(stepTimer2);
-      clearTimeout(stepTimer3);
+      clearTimers();
 
       if (!data) {
         throw lastError || new Error("Failed to connect to backend on port 8000. Please ensure the Python server is running: uvicorn main:app --reload --port 8000");
@@ -372,6 +376,7 @@ export default api;
         text: `Generation Failed: ${errMsg}\n\nPlease ensure the Python FastAPI backend is running: \`uvicorn main:app --reload --port 8000\`` 
       }]);
     } finally {
+      clearTimers();
       setLoading(false);
       setStatusStep("");
       setPrompt("");
