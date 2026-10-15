@@ -1,3 +1,4 @@
+import os
 from langgraph.graph import StateGraph, END
 from state import AgentState
 from agents.orchestrator import orchestrator_node
@@ -7,10 +8,11 @@ from agents.reviewer import reviewer_node
 
 def should_continue(state):
     errors = state.get("errors")
-    iteration = state.get("iteration", 0)
+    attempt = state.get("attempt", 0)
+    max_attempts = int(os.getenv("MAX_ATTEMPTS", "3"))
     
-    if errors and iteration < 3:
-        print("Errors found, returning to coder...")
+    if errors and attempt < max_attempts:
+        print(f"Errors found, returning to coder (attempt {attempt}/{max_attempts})...")
         return "coder"
     return END
 
