@@ -119,6 +119,7 @@ export default function Home() {
   const [testResult, setTestResult] = useState<{ status: number; duration: number; data: any; source: string } | null>(null);
   const [testingApi, setTestingApi] = useState(false);
   const [copiedServerCode, setCopiedServerCode] = useState(false);
+  const [exportingZip, setExportingZip] = useState(false);
   const [template, setTemplate] = useState<"react" | "vanilla">("react");
   const [dependencies, setDependencies] = useState<Record<string, string>>({
     "lucide-react": "latest",
@@ -447,28 +448,93 @@ export default api;
     setTimeout(() => setCopiedServerCode(false), 2000);
   };
 
-  const downloadFullstackProject = () => {
+  const downloadFullstackProject = async () => {
     if (!rawFiles) return;
-    const projectData = {
-      name: "agentic-fullstack-app",
-      generatedAt: new Date().toISOString(),
-      files: rawFiles,
-      apiSpec: apiSpec,
-      instructions: {
-        backend: "Run `cd server && npm install && npm start` or `node server.js`",
-        frontend: "Run `npm install && npm start`"
+    setExportingZip(true);
+    try {
+      const JSZipModule = await import("jszip");
+      const JSZip = JSZipModule.default || JSZipModule;
+      const zip = new JSZip();
+
+      // Root Readme
+      const readmeContent = `# Full-Stack Application Bundle\nGenerated autonomously by Agentic IDE.\n\n## 📁 Architecture\n- \\`/server\\`: Node.js + Express REST API Backend\n- \\`/client\\`: React 19 + Tailwind Interactive Frontend\n\n## 🚀 Quickstart Guide\n\n### 1. Launch the Backend Server\n\\`\\`\\`bash\ncd server\nnpm install\nnpm start\n\\`\\`\\`\nServer runs at http://localhost:5000 with CORS and REST endpoints.\n\n### 2. Launch the Frontend Client\n\\`\\`\\`bash\ncd client\nnpm install\nnpm start\n\\`\\`\\`\nFrontend opens at http://localhost:3000 and connects to the backend on port 5000.\n`;
+      zip.file("README.md", readmeContent);
+
+      const serverFolder = zip.folder("server");
+      const clientFolder = zip.folder("client");
+      const clientSrcFolder = clientFolder?.folder("src");
+      const clientServicesFolder = clientSrcFolder?.folder("services");
+
+      let hasServerPkg = false;
+      let hasClientPkg = false;
+
+      for (const [path, fileVal] of Object.entries(rawFiles)) {
+        const cleanPath = path.startsWith("/") ? path.slice(1) : path;
+        const lower = cleanPath.toLowerCase();
+
+        if (lower.startsWith("server/") || lower === "server.js") {
+          const subPath = cleanPath.replace(/^server\//i, "");
+          serverFolder?.file(subPath, fileVal);
+          if (subPath === "package.json") hasServerPkg = true;
+        } else if (lower.endsWith("package.json") && !lower.includes("server")) {
+          clientFolder?.file("package.json", fileVal);
+          hasClientPkg = true;
+        } else if (lower.includes("services/api.js") || lower.endsWith("api.js")) {
+          clientServicesFolder?.file("api.js", fileVal);
+        } else if (lower.endsWith("styles.css") || lower.endsWith("index.css") || lower.endsWith("globals.css")) {
+          clientSrcFolder?.file("styles.css", fileVal);
+        } else if (lower.endsWith("app.js") || lower.endsWith("app.jsx") || lower.endsWith("app.tsx")) {
+          clientSrcFolder?.file("App.js", fileVal);
+        } else if (lower === "readme.md") {
+          // Included as root README.md
+        } else {
+          clientFolder?.file(cleanPath, fileVal);
+        }
       }
-    };
-    
-    const blob = new Blob([JSON.stringify(projectData, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `fullstack-app-${Date.now()}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+
+      // Default server package.json if omitted
+      if (!hasServerPkg && serverFolder) {
+        serverFolder.file("package.json", JSON.stringify({
+          name: "backend-server",
+          version: "1.0.0",
+          main: "server.js",
+          scripts: { start: "node server.js" },
+          dependencies: { express: "^4.19.2", cors: "^2.8.5" }
+        }, null, 2));
+      }
+
+      // Default client package.json if omitted
+      if (!hasClientPkg && clientFolder) {
+        clientFolder.file("package.json", JSON.stringify({
+          name: "frontend-client",
+          version: "1.0.0",
+          private: true,
+          dependencies: {
+            "react": "^19.0.0",
+            "react-dom": "^19.0.0",
+            "lucide-react": "^1.23.0"
+          },
+          scripts: {
+            start: "react-scripts start",
+            build: "react-scripts build"
+          }
+        }, null, 2));
+      }
+
+      const zipBlob = await zip.generateAsync({ type: "blob" });
+      const url = URL.createObjectURL(zipBlob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `agentic-fullstack-app-${Date.now()}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("Failed to generate zip export:", err);
+    } finally {
+      setExportingZip(false);
+    }
   };
 
   return (
@@ -545,11 +611,16 @@ export default api;
             {files && (
               <button
                 onClick={downloadFullstackProject}
-                className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-xs font-medium text-gray-200 border border-gray-700 transition shadow-sm"
-                title="Download full-stack files as bundle"
+                disabled={exportingZip}
+                className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-xs font-medium text-gray-200 border border-gray-700 transition shadow-sm disabled:opacity-50"
+                title="Download full-stack project as runnable ZIP distribution"
               >
-                <Download className="w-3.5 h-3.5" />
-                <span>Export Project</span>
+                {exportingZip ? (
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Download className="w-3.5 h-3.5" />
+                )}
+                <span>{exportingZip ? "Zipping..." : "Export ZIP"}</span>
               </button>
             )}
           </div>
