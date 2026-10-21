@@ -1,6 +1,7 @@
 fastapi
 uvicorn
 pydantic
+slowapi
 langgraph
 langchain
 langchain-ollama
