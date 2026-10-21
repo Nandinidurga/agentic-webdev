@@ -122,6 +122,7 @@ export default function Home() {
   const [copiedServerCode, setCopiedServerCode] = useState(false);
   const [exportingZip, setExportingZip] = useState(false);
   const [selectedBackendFile, setSelectedBackendFile] = useState<string>("/server.js");
+  const [customPayload, setCustomPayload] = useState<string>("");
   const [template, setTemplate] = useState<"react" | "vanilla">("react");
   const [dependencies, setDependencies] = useState<Record<string, string>>({
     "lucide-react": "latest",
@@ -225,6 +226,7 @@ export default function Home() {
 
       if (data.api_spec && data.api_spec.length > 0) {
         setSelectedEndpoint(data.api_spec[0]);
+        setCustomPayload(data.api_spec[0].sampleRequest ? JSON.stringify(data.api_spec[0].sampleRequest, null, 2) : "");
       }
 
       if (data.files && Object.keys(data.files).length > 0) {
@@ -401,11 +403,26 @@ export default api;
       const timeoutId = setTimeout(() => controller.abort(), 1200);
 
       const host = typeof window !== "undefined" ? window.location.hostname : "localhost";
-      const targetUrl = `http://${host}:5000${endpoint.path}`;
+      const resolvedPath = endpoint.path.replace(/:[a-zA-Z0-9_]+/g, "1");
+      const targetUrl = `http://${host}:5000${resolvedPath}`;
+
+      let parsedBody: any = undefined;
+      if (endpoint.method !== 'GET') {
+        if (customPayload.trim()) {
+          try {
+            parsedBody = JSON.parse(customPayload);
+          } catch {
+            parsedBody = endpoint.sampleRequest;
+          }
+        } else if (endpoint.sampleRequest) {
+          parsedBody = endpoint.sampleRequest;
+        }
+      }
+
       const res = await fetch(targetUrl, {
         method: endpoint.method,
         headers: { "Content-Type": "application/json" },
-        body: (endpoint.method !== 'GET' && endpoint.sampleRequest) ? JSON.stringify(endpoint.sampleRequest) : undefined,
+        body: parsedBody ? JSON.stringify(parsedBody) : undefined,
         signal: controller.signal
       });
       clearTimeout(timeoutId);
@@ -773,6 +790,7 @@ export default api;
                             onClick={() => {
                               setSelectedEndpoint(ep);
                               setTestResult(null);
+                              setCustomPayload(ep.sampleRequest ? JSON.stringify(ep.sampleRequest, null, 2) : "");
                             }}
                             className={`p-2.5 rounded-xl border cursor-pointer transition-all ${
                               isSelected
@@ -829,17 +847,31 @@ export default api;
                         </p>
                       </div>
 
-                      {/* Request Payload Card (if applicable) */}
-                      {selectedEndpoint.sampleRequest && (
+                      {/* Interactive Request Payload Editor */}
+                      {['POST', 'PUT', 'PATCH'].includes(selectedEndpoint.method) ? (
+                        <div className="rounded-xl border border-gray-800 bg-[#141624] overflow-hidden">
+                          <div className="px-3.5 py-2 bg-[#181b2d] border-b border-gray-800 flex items-center justify-between text-[11px] font-semibold uppercase tracking-wider text-gray-400">
+                            <span>Interactive Request Body (JSON)</span>
+                            <span className="text-[10px] text-blue-400 font-normal">Editable</span>
+                          </div>
+                          <textarea
+                            value={customPayload}
+                            onChange={(e) => setCustomPayload(e.target.value)}
+                            rows={5}
+                            className="w-full p-3.5 text-xs font-mono text-emerald-300 bg-[#0f111c] outline-none border-none resize-y"
+                            placeholder="{}"
+                          />
+                        </div>
+                      ) : selectedEndpoint.sampleRequest ? (
                         <div className="rounded-xl border border-gray-800 bg-[#141624] overflow-hidden">
                           <div className="px-3.5 py-2 bg-[#181b2d] border-b border-gray-800 text-[11px] font-semibold uppercase tracking-wider text-gray-400">
-                            Sample Request Body (JSON)
+                            Sample Request Parameters
                           </div>
                           <pre className="p-3.5 text-xs font-mono text-emerald-300 bg-[#0f111c] overflow-x-auto">
                             {JSON.stringify(selectedEndpoint.sampleRequest, null, 2)}
                           </pre>
                         </div>
-                      )}
+                      ) : null}
 
                       {/* Live Test Results Card */}
                       {testResult && (
