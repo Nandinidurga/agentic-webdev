@@ -377,6 +377,19 @@ export default api;
         
         setDependencies(parsedDependencies);
         setFiles(formattedFiles);
+
+        // Trigger celebratory confetti on successful full-stack generation
+        try {
+          const confettiModule = await import("canvas-confetti");
+          const confetti = confettiModule.default || confettiModule;
+          confetti({
+            particleCount: 75,
+            spread: 80,
+            origin: { y: 0.6 }
+          });
+        } catch {
+          // Non-critical confetti fallback
+        }
       }
     } catch (error: any) {
       console.error(error);
