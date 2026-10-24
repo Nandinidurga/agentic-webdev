@@ -1,10 +1,24 @@
 import os
 import time
-from typing import Optional
-from fastapi import FastAPI, HTTPException, status
+import uuid
+import asyncio
+import logging
+from typing import Optional, List
+from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
 from dotenv import load_dotenv, find_dotenv
+
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+)
+logger = logging.getLogger("agentic_ide_backend")
 
 # Load environment variables
 load_dotenv(find_dotenv())
@@ -14,17 +28,28 @@ if "HF_TOKEN" in os.environ and "HUGGINGFACEHUB_API_TOKEN" not in os.environ:
     os.environ["HUGGINGFACEHUB_API_TOKEN"] = os.environ["HF_TOKEN"]
 
 START_TIME = time.time()
+GENERATION_TIMEOUT_SECONDS = int(os.getenv("GENERATION_TIMEOUT", "120"))
+MAX_PROMPT_LENGTH = int(os.getenv("MAX_PROMPT_LENGTH", "5000"))
+
+# Initialize rate limiter
+limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
 
 app = FastAPI(
     title="Agentic Full-Stack Studio API",
     description="Multi-agent LangGraph engine generating React frontends and Express.js REST backends",
-    version="2.0.0"
+    version="2.1.0"
 )
 
-# CORS middleware
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# Configure CORS origins from environment variable (removes wildcard + credentials combination)
+raw_origins = os.getenv("FRONTEND_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000")
+allowed_origins = [orig.strip() for orig in raw_origins.split(",") if orig.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # In production, restrict to frontend domain
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -35,7 +60,7 @@ class PromptRequest(BaseModel):
         ..., 
         description="Natural language description of the web application to engineer",
         min_length=3,
-        max_length=5000
+        max_length=MAX_PROMPT_LENGTH
     )
 
     @field_validator("prompt")
@@ -63,7 +88,7 @@ def root():
     """Root metadata endpoint."""
     return {
         "service": "Agentic Full-Stack Studio API",
-        "version": "2.0.0",
+        "version": "2.1.0",
         "status": "operational",
         "endpoints": {
             "generate": "POST /generate",
@@ -88,25 +113,44 @@ def health_check():
         },
         "rag_vector_store": {
             "chroma_db_present": chroma_exists
+        },
+        "config": {
+            "max_attempts": int(os.getenv("MAX_ATTEMPTS", "3")),
+            "generation_timeout": GENERATION_TIMEOUT_SECONDS,
+            "heal_regex_enabled": os.getenv("HEAL_REGEX", "0").strip().lower() in ("1", "true")
         }
     }
 
 @app.post("/generate")
-def generate_app(request: PromptRequest):
+@limiter.limit(os.getenv("RATE_LIMIT", "10/minute"))
+async def generate_app(request: Request, body: PromptRequest):
     """
     Main agentic entry point: runs the LangGraph cognitive loop
     (Orchestrator -> Knowledge Dual RAG -> Coder -> Reviewer Auto-Healer).
+    Includes slowapi rate limiting, 120s execution timeout, and sanitized error responses.
     """
     try:
         graph = get_graph()
-        initial_state = {"prompt": request.prompt, "iteration": 0}
+        initial_state = {"prompt": body.prompt, "attempt": 0}
         
-        # Run graph
-        result = graph.invoke(initial_state)
+        # Run graph in worker thread with timeout enforcement
+        result = await asyncio.wait_for(
+            asyncio.to_thread(graph.invoke, initial_state),
+            timeout=float(GENERATION_TIMEOUT_SECONDS)
+        )
+        
+        raw_errors = result.get("errors")
+        errors_list: List[str] = []
+        if isinstance(raw_errors, list):
+            errors_list = [str(e) for e in raw_errors if e]
+        elif isinstance(raw_errors, str) and raw_errors.strip():
+            errors_list = [raw_errors.strip()]
+            
+        has_remaining_errors = bool(errors_list)
         
         return {
-            "status": "success", 
-            "message": "Workflow completed",
+            "status": "partial" if has_remaining_errors else "success",
+            "message": "Workflow completed with non-fatal issues" if has_remaining_errors else "Workflow completed",
             "plan": result.get("plan"),
             "code": result.get("code"),
             "files": result.get("files", {}),
@@ -115,14 +159,30 @@ def generate_app(request: PromptRequest):
             "api_spec": result.get("api_spec", []),
             "execution_result": result.get("execution_result"),
             "backend_test_results": result.get("backend_test_results"),
-            "errors": result.get("errors")
+            "errors": errors_list,
+            "attempt": result.get("attempt", 1)
         }
+    except asyncio.TimeoutError:
+        req_id = str(uuid.uuid4())
+        logger.error(f"[Request ID {req_id}] Generation timed out after {GENERATION_TIMEOUT_SECONDS}s for prompt: {body.prompt[:80]}...")
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail={
+                "message": f"Generation timed out after {GENERATION_TIMEOUT_SECONDS} seconds. Please try a more specific prompt or retry.",
+                "request_id": req_id
+            }
+        )
     except ValueError as ve:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ve))
+    except HTTPException:
+        raise
     except Exception as e:
-        import traceback
-        traceback.print_exc()
+        req_id = str(uuid.uuid4())
+        logger.error(f"[Request ID {req_id}] Unhandled error during application generation: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Generation failed: {str(e)}"
+            detail={
+                "message": "An internal server error occurred while processing your generation request.",
+                "request_id": req_id
+            }
         )
