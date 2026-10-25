@@ -1053,14 +1053,28 @@ export default api;
         </div>
 
         {/* Prompt Input Box */}
-        <div className="p-4 border-t border-gray-800 bg-[#161826] space-y-3">
-          <textarea
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handleGenerate())}
-            placeholder="e.g. Build an employee directory with departments, search, and editing..."
-            className="w-full bg-[#0e1017] text-white rounded-xl p-3 outline-none focus:ring-2 focus:ring-blue-500/80 focus:border-transparent resize-none h-28 border border-gray-700/80 placeholder-gray-500 text-xs shadow-inner transition-all"
-          />
+        <div className="p-4 border-t border-gray-800 bg-[#161826] space-y-2.5">
+          <div className="relative">
+            <textarea
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handleGenerate())}
+              placeholder="e.g. Build a Task & Priority Tracker with categories, status, and editing..."
+              className="w-full bg-[#0e1017] text-white rounded-xl p-3 pb-7 outline-none focus:ring-2 focus:ring-blue-500/80 focus:border-transparent resize-none h-28 border border-gray-700/80 placeholder-gray-500 text-xs shadow-inner transition-all"
+            />
+            <div className="absolute bottom-2.5 left-3 right-3 flex items-center justify-between text-[10px] text-gray-500 select-none pointer-events-none">
+              <span>Enter ↵ to run</span>
+              {prompt.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setPrompt("")}
+                  className="pointer-events-auto text-gray-400 hover:text-gray-200 transition underline"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+          </div>
           <button
             onClick={() => handleGenerate()}
             disabled={loading}
