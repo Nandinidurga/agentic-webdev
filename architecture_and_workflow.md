@@ -7,13 +7,13 @@
 
 ## 1. System Architecture (The "Brain & Hands")
 
-The architecture integrates a cyclical multi-agent cognitive graph (LangGraph), a dual-provider resilient LLM engine, a dual-domain Vector Knowledge Base (ChromaDB), and an in-browser isolated execution sandbox (CodeSandbox Sandpack).
+The architecture integrates a cyclical multi-agent cognitive graph (LangGraph), a dual-provider resilient LLM engine, a dual-domain Vector Knowledge Base (ChromaDB), an in-browser isolated execution sandbox (CodeSandbox Sandpack), and a high-performance Monaco Editor.
 
 ### High-Level Architecture Diagram
 
 ```mermaid
 flowchart TD
-    User([User Natural Language Prompt]) --> UI[Next.js 16 Full-Stack Studio\n• Sandpack Live Preview\n• REST API Inspector\n• Plan & Logs Viewer\n• ZIP Exporter]
+    User([User Natural Language Prompt]) --> UI[Next.js 16 Full-Stack Studio\n• Sandpack Live Preview\n• Monaco Backend Inspector\n• Interactive REST API Tester\n• JSZip Project Exporter]
     
     UI -->|POST /generate| Gateway[FastAPI Backend Gateway :8000]
 
@@ -21,13 +21,13 @@ flowchart TD
         Orchestrator[Orchestrator Agent\n• Architectural Blueprint\n• Structured REST API Spec]
         Knowledge[Dual RAG Knowledge Agent\n• ChromaDB Semantic Search\n• React + Express Docs]
         Coder[Coder Agent\n• Express Server + CRUD Routes\n• React UI Components & Styles\n• Dual-Mode API Client]
-        Reviewer[Reviewer & Auto-Healer Agent\n• Static Syntax & Route Check\n• Runtime Guard Injection\n• Self-Healing Feedback Loop]
+        Reviewer[Reviewer & Auto-Healer Agent\n• Static Syntax & Route Check\n• Runtime Guard Injection\n• Iteration Bounded Loop]
     end
 
     subgraph LLM Resilience Engine
         LLMFactory[Resilient LLM Factory]
         Groq[Primary: Groq Cloud\nGPT-OSS-20b / Llama-3.3-70b\nAutomated Backoff Retry]
-        Gemini[Fallback: Google Gemini\nGemini 3.6 Flash]
+        Gemini[Fallback: Google Gemini\nGemini 1.5 Flash\nDeep Context Reasoning]
     end
 
     subgraph Knowledge & Memory Layer
@@ -43,7 +43,7 @@ flowchart TD
     BackendDocs --> Chroma
     Knowledge --> Coder
     Coder --> Reviewer
-    Reviewer -->|Self-Healing Loop if Errors & Iteration < 3| Coder
+    Reviewer -->|Self-Healing Loop if Critical Errors & Iteration < 3| Coder
     Reviewer --> Gateway
 
     Orchestrator -.-> LLMFactory
@@ -53,8 +53,9 @@ flowchart TD
 
     Gateway -->|Full-Stack Files & Specs| UI
     UI --> Sandpack[Live In-Browser Sandpack Sandbox]
-    UI --> ApiInspector[Interactive REST API Tester]
-    UI --> ZipExport[Full-Stack ZIP Distribution]
+    UI --> ApiInspector[Interactive REST API Tester with Custom Payloads]
+    UI --> BackendEditor[Monaco Multi-File Source Inspector]
+    UI --> ZipExport[JSZip Full-Stack Runnable Bundle]
 ```
 
 ---
@@ -89,63 +90,27 @@ flowchart TD
   * Automatically injects defensive runtime guards into React code (`(items || []).map(...)`, `(Number(val) || 0).toFixed(2)`).
   * Auto-heals uninitialized `useState()` hooks to `useState([])`.
   * Standardizes single-quoted `package.json` files to strictly valid double-quoted JSON.
-* **Cyclic Loop:** If critical structural errors are detected, returns feedback to the Coder Agent for self-healing (up to 3 iterations).
+  * Strictly bounds retry iterations to at most 3 cycles to guarantee deterministic termination.
 
 ---
 
-## 3. The End-to-End Agentic Workflow
+## 3. Full-Stack Export Architecture
 
-```mermaid
-sequenceDiagram
-    autonumber
-    actor User
-    participant UI as Next.js Studio
-    participant API as FastAPI Gateway
-    participant Orch as Orchestrator Agent
-    participant RAG as Knowledge Agent
-    participant Vector as ChromaDB
-    participant Coder as Coder Agent
-    participant LLM as Resilient LLM Engine
-    participant QA as Reviewer Agent
+When users export the project, `JSZip` structures the bundle into standard, modular development environments:
 
-    User->>UI: Enters Prompt ("Build an Expense & Budget Tracker")
-    UI->>API: POST /generate { prompt }
-    API->>Orch: Invoke LangGraph (initial_state)
-    
-    rect rgb(240, 245, 255)
-        Note over Orch,LLM: Step 1: Planning & API Specification
-        Orch->>LLM: Formulate Architecture & REST Endpoints
-        LLM-->>Orch: Technical Plan + JSON api_spec
-    end
-
-    rect rgb(245, 255, 245)
-        Note over RAG,Vector: Step 2: Dual-Domain Context Retrieval
-        Orch->>RAG: Pass Plan & Endpoints
-        RAG->>Vector: Query React Patterns & Express Best Practices
-        Vector-->>RAG: 4 Chunks (2 Frontend, 2 Backend)
-    end
-
-    rect rgb(255, 250, 240)
-        Note over Coder,LLM: Step 3: Full-Stack Code Generation
-        RAG->>Coder: Pass Technical Context & Guidelines
-        Coder->>LLM: Generate Server + UI + Dual-Mode Client JSON
-        LLM-->>Coder: Raw File Mapping { /server.js, /App.js, ... }
-    end
-
-    rect rgb(255, 240, 245)
-        Note over QA,Coder: Step 4: Verification & Auto-Healing
-        Coder->>QA: Send Generated Files
-        QA->>QA: Run Static Checks & heal_frontend_code()
-        alt Critical Errors Found & Iteration < 3
-            QA->>Coder: Trigger Self-Healing Loop with Errors
-        else Code Validated & Healed
-            QA-->>API: Return Final Verified Full-Stack State
-        end
-    end
-
-    API-->>UI: Return JSON { plan, api_spec, files, backend_files, frontend_files }
-    UI->>UI: Sanitize Sandpack Files & Mount Sandpack Preview
-    UI->>User: Displays Live App + REST API Tester + Code Viewer
+```
+agentic-fullstack-app.zip
+├── README.md                 # Universal startup instructions & API documentation
+├── server/                   # Node.js / Express Backend
+│   ├── server.js             # REST API server & CORS configuration
+│   └── package.json          # Express and CORS dependencies
+└── client/                   # React Frontend Client
+    ├── package.json          # React, ReactDOM, and icon dependencies
+    └── src/
+        ├── App.js            # Main interactive UI application
+        ├── styles.css        # Responsive styling and glassmorphism themes
+        └── services/
+            └── api.js        # Dual-mode API client (live HTTP + fallback)
 ```
 
 ---
@@ -167,6 +132,7 @@ flowchart TD
         L2A --> L2C[Wraps bare array methods with var or empty array]
         L2A --> L2D[Wraps toFixed with Number conversion fallback]
         L2A --> L2E[Converts single-quoted package.json to double quotes]
+        L2A --> L2F[Tracks iteration bounds to prevent infinite loops]
     end
 
     subgraph Layer 1: Client-Side Sandpack Sanitizer
@@ -188,13 +154,15 @@ flowchart TD
 | **Frontend IDE** | Next.js 16 (App Router), React 19, TypeScript | Reactive developer studio shell |
 | **Styling** | Vanilla CSS + TailwindCSS Utilities | Modern dark-mode UI with sleek glassmorphism |
 | **In-Browser Sandbox** | `@codesandbox/sandpack-react` | Zero-latency, browser-isolated React bundler |
+| **Code Editor** | Monaco Editor (`@monaco-editor/react`) | Professional syntax highlighting & source inspection |
 | **Backend Gateway** | FastAPI, Uvicorn (Python 3.12) | High-concurrency async REST server on port 8000 |
 | **Agent Orchestration** | LangGraph & LangChain Core | Cyclical, multi-node state graph with conditional branching |
 | **Primary LLM** | Groq Cloud (`openai/gpt-oss-20b`, `llama-3.3-70b`) | Ultra-fast token generation (~3s) with automated backoff retry |
-| **Fallback LLM** | Google Gemini (`gemini-3.6-flash`) | High-capacity fallback reasoning engine |
+| **Fallback LLM** | Google Gemini (`gemini-1.5-flash`) | High-capacity fallback reasoning engine |
 | **Vector Database** | ChromaDB | Local persistent store for technical documentation |
 | **Embedding Engine** | HuggingFace `sentence-transformers/all-MiniLM-L6-v2` | Zero-cost, local semantic vectorizer |
-| **Export Utility** | `jszip` | On-the-fly packaging of runnable full-stack projects |
+| **Export Engine** | `jszip` | On-the-fly packaging of runnable full-stack zip distributions |
+| **Feedback UX** | `canvas-confetti` | Visual celebration upon successful generation |
 
 ---
 
@@ -203,3 +171,4 @@ flowchart TD
 * **In-Browser Sandpack Sandbox:** Client-side React code executes inside an isolated iframe managed by Sandpack. No local Docker installation is required.
 * **Dual-Mode Client Architecture:** `/services/api.js` enables the generated app to run out-of-the-box inside the browser sandbox using in-memory mock data, while instantly connecting to `http://localhost:5000` when the user starts the local Express server.
 * **Zero Backend Bundle Pollution:** Backend files (`/server.js`, `/server/package.json`) are filtered out before reaching Sandpack, preventing Node.js module resolution errors in the browser.
+* **Interactive Endpoint Testing:** The studio allows direct parameter substitution (e.g. `:id` -> `1`) and editable JSON payloads for `POST`/`PUT`/`PATCH` endpoints.
