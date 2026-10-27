@@ -214,7 +214,8 @@ export default function PreviewPane({
 
               <div className="flex-1 min-h-0 bg-zinc-950">
                 <Editor
-                  value={activeBackendCode}
+                  code={activeBackendCode}
+                  filename={activeBackendKey}
                   language={activeBackendKey.endsWith(".json") ? "json" : "javascript"}
                   readOnly
                 />
