@@ -12,6 +12,12 @@ Agentic IDE is an autonomous full-stack web development studio that transforms n
 * **Interactive REST API Inspector:** Built-in endpoint testing console supporting live latency measurement, parameter substitution (e.g. `:id` -> `1`), and an editable JSON payload editor for `POST`, `PUT`, and `PATCH` routes.
 * **Dual-Mode API Client (`/services/api.js`):** Seamless hybrid client that attempts live HTTP connection to local port 5000, while gracefully falling back to an in-memory reactive store inside the browser preview sandbox.
 * **One-Click Runnable Full-Stack Export (JSZip):** Downloads a ready-to-run ZIP archive containing structured `/server` and `/client` directories with quickstart scripts and instructions.
+* **Modular Frontend Studio Architecture:**
+  * **Componentized UI Shell:** Clean separation of concerns with `page.tsx` decoupled into dedicated components (`ChatPanel`, `PreviewPane`, `ApiInspector`, `ExportButton`) and a centralized `useGenerate` orchestration hook.
+  * **Configurable Client Endpoints:** Dynamic environment configuration via `NEXT_PUBLIC_API_URL` and `NEXT_PUBLIC_EXPRESS_URL` with resilient local defaults.
+  * **Strict TypeScript Type Safety:** Complete removal of `any` across the frontend studio, replaced by strong domain interfaces (`ApiEndpoint`, `StructuredError`, `ChatMessage`, `TestResult`, `GenerationResponse`).
+  * **Explicit Simulated Response Labeling:** Fallback mock responses in the REST API Inspector are clearly badged with amber warnings (`MOCK / SIMULATED`) and never display misleading green success statuses.
+  * **Real-Time Validation Diagnostics:** Visual surfacing of backend `"partial"` status and structured validator error lists (`[{file, line, rule, message}]`) in an expandable alert banner.
 * **Bounded Multi-Attempt Self-Healing Loop:**
   * Clean separation between cognitive architecture planning and coder execution runs (`attempt`).
   * `MAX_ATTEMPTS` configurable via environment variable (default: 3).
@@ -136,11 +142,20 @@ agentic-webdev/
 ├── frontend/                        # Next.js Full-Stack Developer Studio
 │   ├── src/
 │   │   ├── app/
-│   │   │   ├── page.tsx             # Studio interface: Chat, Sandpack, API Tester, Plan
+│   │   │   ├── page.tsx             # Streamlined studio shell coordinator
 │   │   │   ├── layout.tsx           # Application layout wrapper & crypto polyfill
 │   │   │   └── globals.css          # Design system & dark mode styles
-│   │   └── components/
-│   │       └── Editor.tsx           # Monaco code editor component for backend sources
+│   │   ├── components/
+│   │   │   ├── ChatPanel.tsx        # Interactive chat interface & partial error alert banner
+│   │   │   ├── PreviewPane.tsx      # Sandpack preview, Monaco editor, & architecture plan
+│   │   │   ├── ApiInspector.tsx     # REST API testing console with explicit simulated badges
+│   │   │   ├── ExportButton.tsx     # Runnable full-stack JSZip bundle downloader
+│   │   │   └── Editor.tsx           # Monaco code editor component for backend sources
+│   │   ├── hooks/
+│   │   │   └── useGenerate.ts       # Centralized generation state and API hook
+│   │   └── types/
+│   │       └── studio.ts            # Strong TypeScript interfaces for studio domain
+│   ├── .env.example                 # Frontend environment configuration template
 │   ├── package.json                 # Frontend dependencies (Next.js, Sandpack, Lucide, JSZip, Confetti)
 │   └── tsconfig.json                # TypeScript configuration
 ├── knowledge_base/                  # Source Markdown documentation for RAG ingestion
