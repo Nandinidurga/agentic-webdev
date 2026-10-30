@@ -12,10 +12,16 @@ Agentic IDE is an autonomous full-stack web development studio that transforms n
 * **Interactive REST API Inspector:** Built-in endpoint testing console supporting live latency measurement, parameter substitution (e.g. `:id` -> `1`), and an editable JSON payload editor for `POST`, `PUT`, and `PATCH` routes.
 * **Dual-Mode API Client (`/services/api.js`):** Seamless hybrid client that attempts live HTTP connection to local port 5000, while gracefully falling back to an in-memory reactive store inside the browser preview sandbox.
 * **One-Click Runnable Full-Stack Export (JSZip):** Downloads a ready-to-run ZIP archive containing structured `/server` and `/client` directories with quickstart scripts and instructions.
-* **3-Layer Defensive Immunity & Auto-Healer:**
-  1. *Client-side sanitizer:* Excludes server files from Sandpack, auto-initializes `useState([])`, wraps array transformations (`.map`, `.filter`, `.reduce`), and guards `.toFixed()`.
-  2. *Reviewer Auto-Healer:* Server-side AST/regex repair agent that fixes uninitialized state, bare array methods, and single-quoted `package.json` files before transmission, strictly bounded to at most 3 cycles to guarantee deterministic termination.
-  3. *Coder Prompt Hardening:* Strict defensive coding patterns enforced on the LLM.
+* **Bounded Multi-Attempt Self-Healing Loop:**
+  * Clean separation between cognitive architecture planning and coder execution runs (`attempt`).
+  * `MAX_ATTEMPTS` configurable via environment variable (default: 3).
+  * Returns `status: "partial"` with remaining errors if issues persist after the final coder attempt.
+  * Reviewer regex auto-healer guarded cleanly behind `HEAL_REGEX=1` (default off).
+* **API Security, Rate Limiting & Timeouts:**
+  * Strict CORS policies driven by `FRONTEND_ORIGINS` (disallowing insecure wildcard + credentials combinations).
+  * Built-in `slowapi` rate limiting on the `/generate` endpoint.
+  * Async 120-second generation timeout preventing unhandled agent thread stalls.
+  * Sanitized 500 error responses masking internal stack traces while emitting traceable `request_id` values.
 * **Resilient Multi-Provider LLM Engine:** Primary high-speed execution with **Groq Cloud** (`openai/gpt-oss-20b` or `llama-3.3-70b-versatile`) with automated per-second backoff and seamless failover to **Google Gemini** (`gemini-1.5-flash`).
 * **Dual RAG Knowledge Base:** ChromaDB vector database housing both official React documentation and curated Express.js/REST engineering patterns via local HuggingFace embeddings (`all-MiniLM-L6-v2`).
 * **Celebration & Modern UX:** Micro-interactions, status pills, keyboard shortcuts (`Enter` to generate, `Shift+Enter` for new line), and celebratory confetti animations upon successful build.
@@ -27,13 +33,13 @@ Agentic IDE is an autonomous full-stack web development studio that transforms n
 ```mermaid
 flowchart TD
     User([User Prompt]) --> UI[Next.js Full-Stack Studio\nSandpack + Monaco + API Inspector]
-    UI -->|POST /generate| Gateway[FastAPI Backend :8000]
+    UI -->|POST /generate| Gateway[FastAPI Backend :8000\nslowapi Rate Limiting + 120s Timeout]
 
     subgraph Cognitive Layer - LangGraph Multi-Agent Workflow
         Orchestrator[Orchestrator Agent\n• Architectural Plan\n• Structured API Specification]
         Knowledge[Dual RAG Knowledge Agent\n• ChromaDB Semantic Retrieval\n• React + Express Docs]
-        Coder[Coder Agent\n• Express Server + CRUD Routes\n• React Components & Styles\n• Dual-Mode API Client]
-        Reviewer[Reviewer & Auto-Healer Agent\n• Static Syntax & Route Check\n• Runtime Guard Injection\n• Bounded Iteration Feedback Loop]
+        Coder[Coder Agent\n• Express Server + CRUD Routes\n• React Components & Styles\n• Attempt Counter Tracking]
+        Reviewer[Reviewer Agent\n• Static Syntax & Route Check\n• Optional HEAL_REGEX=1 Guards\n• Bounded Retry Loop: attempt < MAX_ATTEMPTS]
     end
 
     subgraph LLM Resilience Engine
@@ -55,7 +61,7 @@ flowchart TD
     ExpressDocs --> Chroma
     Knowledge --> Coder
     Coder --> Reviewer
-    Reviewer -->|If Critical Errors & Iteration < 3| Coder
+    Reviewer -->|If Critical Errors & attempt < MAX_ATTEMPTS| Coder
     Reviewer --> Gateway
 
     Orchestrator -.-> LLMFactory
@@ -82,7 +88,7 @@ flowchart TD
 | **Source Inspector** | Monaco Editor (`@monaco-editor/react`) | Professional syntax highlighting and code inspection |
 | **Icons & Feedback** | `lucide-react`, `canvas-confetti` | Modern iconography and celebratory visual feedback |
 | **Export Engine** | `jszip` | Generates runnable full-stack zip distributions on the fly |
-| **Backend Gateway** | FastAPI, Uvicorn, Pydantic (Python 3.10+) | High-throughput async REST server running on port 8000 |
+| **Backend Gateway** | FastAPI, Uvicorn, Pydantic, SlowAPI | High-throughput async REST server with rate limiting on port 8000 |
 | **Agent Framework** | LangGraph & LangChain | Directed cyclical multi-agent graph with bounded self-healing |
 | **Primary LLM** | Groq Cloud (`openai/gpt-oss-20b`, `llama-3.3-70b`) | Lightning-fast inference (sub-3s generation) with automated backoff |
 | **Fallback LLM** | Google Gemini (`gemini-1.5-flash`) | Deep reasoning model with large context window fallback |
@@ -99,17 +105,17 @@ agentic-webdev/
 │   ├── agents/                      # Cognitive LangGraph Agents
 │   │   ├── orchestrator.py          # Plans architecture & extracts structured REST API specs
 │   │   ├── knowledge.py             # Dual-domain RAG retrieval (React + Express)
-│   │   ├── coder.py                 # Generates full-stack files (Express server + React UI)
-│   │   └── reviewer.py              # Validates syntax & auto-heals React/package code
+│   │   ├── coder.py                 # Generates full-stack files & tracks attempt counter
+│   │   └── reviewer.py              # Validates syntax & optional HEAL_REGEX guards
 │   ├── chroma_db/                   # Chroma Vector DB storing chunked documentation
 │   ├── llm_factory.py               # Multi-provider ResilientLLM (Groq + Gemini fallback)
-│   ├── graph.py                     # Compiled LangGraph cyclical state workflow
-│   ├── state.py                     # TypedDict state definition (AgentState)
-│   ├── main.py                      # FastAPI application with CORS, validation & /generate
+│   ├── graph.py                     # Compiled LangGraph workflow with MAX_ATTEMPTS bound
+│   ├── state.py                     # TypedDict state definition (AgentState with attempt)
+│   ├── main.py                      # FastAPI application with CORS, SlowAPI rate limit & 120s timeout
 │   ├── rag_ingest.py                # React documentation chunking and embedding
 │   ├── ingest_backend_docs.py       # Express & REST architecture knowledge ingestion
 │   ├── requirements.txt             # Python dependencies
-│   ├── test_suite.py                # Automated unit tests for reviewer, guards & sanitizers
+│   ├── test_suite.py                # Automated unit tests for reviewer, guards & real graph semantics
 │   └── test_fullstack.py            # CLI verification script for end-to-end generation
 ├── frontend/                        # Next.js Full-Stack Developer Studio
 │   ├── src/
@@ -142,7 +148,8 @@ agentic-webdev/
 ### Phase 2: LangGraph Core Flow (Completed)
 - [x] Implemented cyclic LangGraph workflow with `AgentState`.
 - [x] Built Orchestrator, Knowledge, Coder, and Reviewer agent nodes.
-- [x] Configured conditional feedback loop (`should_continue`) bounded to 3 iterations.
+- [x] Configured conditional feedback loop (`should_continue`) bounded by `MAX_ATTEMPTS`.
+- [x] Separated `attempt` counter to track coder generation cycles cleanly.
 
 ### Phase 3: Dual RAG Knowledge Base (Completed)
 - [x] Ingested React 19 documentation into local ChromaDB.
@@ -157,15 +164,14 @@ agentic-webdev/
 - [x] Built **Monaco Multi-File Source Inspector** allowing switching between `/server.js` and `/server/package.json`.
 - [x] Built **ZIP Project Exporter** producing organized `/server` and `/client` projects with universal startup scripts.
 
-### Phase 5: Reliability & Runtime Immunity (Completed)
+### Phase 5: Reliability, Security & Runtime Immunity (Completed)
 - [x] Integrated Groq Cloud as high-speed primary LLM (`openai/gpt-oss-20b`) with smart backoff retry.
 - [x] Implemented automatic fallback to Google Gemini (`gemini-1.5-flash`).
-- [x] Built **3-Layer Defensive Immunity System** against `Cannot read properties of undefined (reading 'map')`.
-- [x] Added robust `parsePackageJson` to handle comments, single quotes, and code blocks safely.
-
-### Phase 6: Cloud Deployment & One-Click Hosting (Next Steps)
-- [ ] Connect Orchestrator to Vercel/Netlify for instant frontend cloud deploys.
-- [ ] Connect backend to Render/Fly.io APIs for containerized Express deployments.
+- [x] Cleaned default reviewer path and placed regex healing behind `HEAL_REGEX=1`.
+- [x] Added `slowapi` rate limiting and a 120s generation timeout to `/generate`.
+- [x] Configured environment-driven CORS origins via `FRONTEND_ORIGINS` removing wildcard + credentials combos.
+- [x] Sanitized 500 error responses with traceable `request_id`.
+- [x] Emitted `status: "partial"` with remaining errors if issues persist after final attempt.
 
 ---
 
@@ -185,7 +191,7 @@ cp .env.example .env
 cp .env.example backend/.env
 ```
 
-Configure your API keys:
+Configure your environment variables:
 ```env
 # Primary LLM (Groq Cloud)
 GROQ_API_KEY=gsk_your_groq_api_key_here
@@ -195,8 +201,15 @@ GROQ_MODEL=openai/gpt-oss-20b
 GOOGLE_API_KEY=your_gemini_api_key_here
 LLM_MODEL=gemini-1.5-flash
 
-# Optional HuggingFace Token
-HF_TOKEN=your_huggingface_token_optional
+# Loop Semantics & Healer Controls
+MAX_ATTEMPTS=3
+HEAL_REGEX=0
+
+# Security & CORS
+FRONTEND_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+RATE_LIMIT=10/minute
+GENERATION_TIMEOUT=120
+MAX_PROMPT_LENGTH=5000
 ```
 
 ### 2. Start the Backend API Server
@@ -233,7 +246,7 @@ Open [http://localhost:3000](http://localhost:3000) in your browser to begin cre
 ## 🧪 Testing & Verification
 
 ### Running Backend Unit Tests
-Execute the automated unit test suite covering reviewer auto-healer, defensive guards, loop bounds, and string unescaping:
+Execute the automated unit test suite covering reviewer auto-healer, real LangGraph `should_continue` semantics, and sanitizers:
 ```bash
 python backend/test_suite.py
 ```
