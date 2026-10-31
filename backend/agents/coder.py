@@ -1,3 +1,4 @@
+import os
 import json
 import re
 from langchain_core.messages import SystemMessage, HumanMessage
@@ -16,11 +17,64 @@ def unescape_json_string(s: str) -> str:
         s = s.replace(old, new)
     return s
 
+def estimate_tokens(text: str) -> int:
+    """Fast conservative heuristic: ~4 characters per token."""
+    return max(1, len(text) // 4)
+
+def build_budgeted_context(state: dict, max_tokens: int) -> str:
+    """
+    Budgets technical context by tokens and prioritizes the highest-scoring chunks.
+    Replaces blind character truncation with score-ranked packing.
+    """
+    rag_chunks = state.get("rag_chunks", [])
+    if rag_chunks and isinstance(rag_chunks, list):
+        # Sort chunks strictly by relevance score descending
+        sorted_chunks = sorted(rag_chunks, key=lambda c: c.get("score", 0.0), reverse=True)
+        packed_snippets = []
+        allocated_tokens = 0
+
+        for chunk in sorted_chunks:
+            domain = str(chunk.get("domain", "doc")).upper()
+            source = str(chunk.get("source", "reference"))
+            score = chunk.get("score", 0.0)
+            content = str(chunk.get("content", "")).strip()
+
+            snippet = f"[{domain} - {source} (relevance: {score})]:\n{content}"
+            chunk_tokens = estimate_tokens(snippet)
+
+            if allocated_tokens + chunk_tokens <= max_tokens:
+                packed_snippets.append(snippet)
+                allocated_tokens += chunk_tokens
+            else:
+                remaining_tokens = max_tokens - allocated_tokens
+                if remaining_tokens > 40:
+                    truncated_content = content[: remaining_tokens * 4]
+                    packed_snippets.append(f"[{domain} - {source} (relevance: {score})]:\n{truncated_content}...")
+                    allocated_tokens += remaining_tokens
+                break
+
+        if packed_snippets:
+            return "\n\n---\n\n".join(packed_snippets)
+
+    # Fallback if raw context string was provided without structured chunks
+    raw_context = state.get("context", "")
+    if not raw_context:
+        return "Rely on standard Node.js/Express and React production patterns."
+
+    max_chars = max_tokens * 4
+    if len(raw_context) <= max_chars:
+        return raw_context
+    return raw_context[:max_chars] + "\n...[Context budgeted to token ceiling]"
+
 def coder_node(state):
     current_attempt = state.get("attempt", 0) + 1
     print(f"--- CODER AGENT (FULL-STACK, ATTEMPT {current_attempt}) ---")
     plan = state.get("plan", "")[:1800]
-    context = state.get("context", "")[:1200]
+    
+    # Token-budgeted context prioritizing highest-scoring chunks
+    max_context_tokens = int(os.getenv("MAX_CONTEXT_TOKENS", "2500"))
+    context = build_budgeted_context(state, max_tokens=max_context_tokens)
+    
     raw_errors = state.get("errors", [])
     api_spec = state.get("api_spec", [])
     
