@@ -1,57 +1,70 @@
+"""
+Agentic Full-Stack Web Development Studio - Core FastAPI Backend
+
+Coordinates the multi-agent cognitive loop powered by LangGraph:
+- Orchestrator: System architecture & API specification planning
+- Knowledge Dual RAG: Context retrieval for backend and frontend libraries
+- Coder: High-fidelity generation of Node.js/Express and React code
+- Reviewer: Deterministic AST & static validator suite with structured errors
+
+Security & Production Hardening:
+- slowapi rate limiting (configurable via RATE_LIMIT env var, default: 10/minute)
+- Async generation execution timeout (configurable via GENERATION_TIMEOUT env var, default: 120s)
+- Sanitized 500 error reporting (hiding internal exception stack traces, returning unique request_ids)
+- Safe CORS configuration parsed from FRONTEND_ORIGINS (no wildcard credentials)
+- Strict prompt validation via Pydantic field validators
+"""
+
 import os
 import time
 import uuid
-import asyncio
 import logging
-from typing import Optional, List
-from fastapi import FastAPI, HTTPException, Request, status
+import asyncio
+from typing import Dict, Any, List, Optional
+from dotenv import load_dotenv
+
+from fastapi import FastAPI, HTTPException, status, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, field_validator
-from dotenv import load_dotenv, find_dotenv
 
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 
+# Load environment configuration
+load_dotenv()
+
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
-)
-logger = logging.getLogger("agentic_ide_backend")
-
-# Load environment variables
-load_dotenv(find_dotenv())
-
-# Map HF_TOKEN to HUGGINGFACEHUB_API_TOKEN for Langchain compatibility
-if "HF_TOKEN" in os.environ and "HUGGINGFACEHUB_API_TOKEN" not in os.environ:
-    os.environ["HUGGINGFACEHUB_API_TOKEN"] = os.environ["HF_TOKEN"]
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+logger = logging.getLogger("agentic-studio")
 
 START_TIME = time.time()
+MAX_PROMPT_LENGTH = int(os.getenv("MAX_PROMPT_LENGTH", "4000"))
 GENERATION_TIMEOUT_SECONDS = int(os.getenv("GENERATION_TIMEOUT", "120"))
-MAX_PROMPT_LENGTH = int(os.getenv("MAX_PROMPT_LENGTH", "5000"))
 
 # Initialize rate limiter
-limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
+limiter = Limiter(key_func=get_remote_address)
 
 app = FastAPI(
-    title="Agentic Full-Stack Studio API",
-    description="Multi-agent LangGraph engine generating React frontends and Express.js REST backends",
-    version="2.1.0"
+    title="Agentic Full-Stack Studio Backend",
+    version="2.1.0",
+    description="Multi-Agent Full-Stack Software Engineering Engine"
 )
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# Configure CORS origins from environment variable (removes wildcard + credentials combination)
-raw_origins = os.getenv("FRONTEND_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000")
+# Configure CORS using FRONTEND_ORIGINS env variable
+# Eliminates wildcard + credentials vulnerability
+raw_origins = os.getenv("FRONTEND_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001")
 allowed_origins = [orig.strip() for orig in raw_origins.split(",") if orig.strip()]
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -126,7 +139,7 @@ def health_check():
 async def generate_app(request: Request, body: PromptRequest):
     """
     Main agentic entry point: runs the LangGraph cognitive loop
-    (Orchestrator -> Knowledge Dual RAG -> Coder -> Reviewer Auto-Healer).
+    (Orchestrator -> Knowledge Dual RAG -> Coder -> Reviewer Static Validators).
     Includes slowapi rate limiting, 120s execution timeout, and sanitized error responses.
     """
     try:
@@ -140,11 +153,11 @@ async def generate_app(request: Request, body: PromptRequest):
         )
         
         raw_errors = result.get("errors")
-        errors_list: List[str] = []
+        errors_list: List[Any] = []
         if isinstance(raw_errors, list):
-            errors_list = [str(e) for e in raw_errors if e]
+            errors_list = raw_errors
         elif isinstance(raw_errors, str) and raw_errors.strip():
-            errors_list = [raw_errors.strip()]
+            errors_list = [{"file": "general", "line": 1, "rule": "general", "message": raw_errors.strip()}]
             
         has_remaining_errors = bool(errors_list)
         
@@ -186,3 +199,7 @@ async def generate_app(request: Request, body: PromptRequest):
                 "request_id": req_id
             }
         )
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
