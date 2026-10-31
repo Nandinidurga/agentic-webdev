@@ -21,8 +21,20 @@ def coder_node(state):
     print(f"--- CODER AGENT (FULL-STACK, ATTEMPT {current_attempt}) ---")
     plan = state.get("plan", "")[:1800]
     context = state.get("context", "")[:1200]
-    errors = state.get("errors", "")
+    raw_errors = state.get("errors", [])
     api_spec = state.get("api_spec", [])
+    
+    # Format only structured reviewer errors cleanly for targeted correction
+    if isinstance(raw_errors, list) and raw_errors:
+        formatted_errors = "\n".join([
+            f"- [{err.get('file', 'general')}:{err.get('line', 1)}] ({err.get('rule', 'error')}) {err.get('message', '')}"
+            if isinstance(err, dict) else f"- {err}"
+            for err in raw_errors
+        ])
+    elif isinstance(raw_errors, str) and raw_errors.strip():
+        formatted_errors = raw_errors.strip()
+    else:
+        formatted_errors = "None"
     
     llm = get_llm()
     
@@ -73,7 +85,7 @@ RULES:
 - DO NOT wrap the output in markdown code blocks like ```json ... ```. Output raw JSON starting with `{{` and ending with `}}`.
 - Do NOT generate HTML files or Vite config files."""
 
-    prompt = f"""Plan & Requirements:\n{plan}\n\nTarget API Specification:\n{api_spec_str}\n\nPrevious Reviewer Errors:\n{errors}\n\nGenerate the complete Full-Stack JSON file structure now:"""
+    prompt = f"""Plan & Requirements:\n{plan}\n\nTarget API Specification:\n{api_spec_str}\n\nPrevious Reviewer Errors (Fix all of these):\n{formatted_errors}\n\nGenerate the complete Full-Stack JSON file structure now:"""
 
     messages = [
         SystemMessage(content=system_prompt),
