@@ -11,6 +11,6 @@ class AgentState(TypedDict, total=False):
     files: Dict[str, str]
     execution_result: str
     backend_test_results: str
-    errors: str
+    errors: List[Dict[str, Any]]
     iteration: int
     attempt: int
