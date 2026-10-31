@@ -5,6 +5,7 @@ class AgentState(TypedDict, total=False):
     plan: str
     api_spec: List[Dict[str, Any]]
     context: str
+    rag_chunks: List[Dict[str, Any]]
     code: str
     backend_files: Dict[str, str]
     frontend_files: Dict[str, str]
