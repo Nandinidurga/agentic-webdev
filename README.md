@@ -17,6 +17,11 @@ Agentic IDE is an autonomous full-stack web development studio that transforms n
   * `MAX_ATTEMPTS` configurable via environment variable (default: 3).
   * Returns `status: "partial"` with remaining errors if issues persist after the final coder attempt.
   * Reviewer regex auto-healer guarded cleanly behind `HEAL_REGEX=1` (default off).
+* **Delimited Block Code Generation & Parallel Generation:**
+  * **Zero JSON Escaping:** Replaces single-giant-JSON with raw delimited blocks (`=== FILE: /path === ... === END FILE ===`), eliminating escaping errors and regex salvage.
+  * **Parallel Backend & Frontend Generation:** Generates Node.js/Express backend and React frontend concurrently in two simultaneous LLM calls after planning, halving latency and doubling effective token throughput.
+  * **Targeted Single-File Re-request:** On any parse omission, re-requests only the specific missing file instead of regenerating the entire project.
+  * **Expanded Token Ceiling:** Model generation limit raised to 8192 tokens via `MAX_TOKENS` env variable.
 * **Optimized Dual RAG & Token-Budgeted Context:**
   * **Selective Upstream Sync:** `knowledge_base/react.dev` git-ignored with `scripts/fetch_react_docs.py` fetching only `src/content/reference` and `src/content/learn`.
   * **Idempotent Ingestion (`backend/rag_ingest.py`):** Deterministic SHA-256 chunk IDs, selective paths, `domain="frontend"` metadata tagging, zero sleep stalls, and collection reset capabilities.
@@ -199,6 +204,13 @@ agentic-webdev/
 - [x] Overhauled `backend/rag_ingest.py` to be idempotent with deterministic SHA-256 chunk IDs, selective path filtering, frontend domain metadata, and zero sleeps.
 - [x] Upgraded `backend/agents/knowledge.py` to `langchain-chroma` with startup singleton vectorstore, domain filtering, and env-driven `RAG_K` and `RAG_SCORE_THRESHOLD`.
 - [x] Upgraded `backend/agents/coder.py` with token-budgeted context packing prioritizing top relevance-scoring chunks.
+
+### Phase 8: Delimited Block Generation & Parallel Execution (Completed)
+- [x] Replaced single-giant-JSON generation with raw delimited block parsing (`backend/file_parser.py`).
+- [x] Implemented concurrent parallel Backend and Frontend LLM generation pipelines in `backend/agents/coder.py`.
+- [x] Added targeted single-file re-request recovery on any parse failure or omitted required files.
+- [x] Raised model token output limits to 8192 tokens across Groq and Gemini (`MAX_TOKENS`).
+- [x] Removed `unescape_json_string` and JSON regex fallback matchers; added pytest test coverage.
 
 ## 🏃 Quickstart & Local Setup
 
