@@ -1,6 +1,7 @@
 """
 Unit Test Suite for Agentic IDE Backend
-Tests reviewer auto-healer, defensive guards, real LangGraph should_continue loop semantics, and sanitizers.
+Tests reviewer auto-healer, defensive guards, real LangGraph should_continue loop semantics,
+token-budgeted RAG context packing, and selective ingestion heuristics.
 Run: python backend/test_suite.py
 """
 
@@ -11,8 +12,9 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from agents.reviewer import heal_frontend_code, reviewer_node
-from agents.coder import unescape_json_string
+from agents.coder import unescape_json_string, build_budgeted_context
 from graph import should_continue, END
+from rag_ingest import should_skip_path, get_deterministic_id
 
 class TestReviewerAutoHealer(unittest.TestCase):
     def test_heal_uninitialized_state(self):
@@ -121,11 +123,38 @@ class TestRealGraphLoopSemantics(unittest.TestCase):
             if "MAX_ATTEMPTS" in os.environ:
                 del os.environ["MAX_ATTEMPTS"]
 
-class TestCoderSanitizer(unittest.TestCase):
+class TestCoderSanitizerAndBudgeting(unittest.TestCase):
     def test_unescape_json_string(self):
         raw = "Line 1\\nLine 2\\tIndented with \\\"quotes\\\" and \\\\ backslash"
         expected = 'Line 1\nLine 2\tIndented with "quotes" and \\ backslash'
         self.assertEqual(unescape_json_string(raw), expected)
+
+    def test_token_budgeting_prioritizes_high_scoring_chunks(self):
+        state = {
+            "rag_chunks": [
+                {"domain": "backend", "source": "low_score.md", "score": 0.45, "content": "LOW PRIORITY CHUNK " * 20},
+                {"domain": "backend", "source": "high_score.md", "score": 0.95, "content": "HIGH PRIORITY CHUNK CONTENT"}
+            ]
+        }
+        # Budget for only ~30 tokens (enough for high score, not enough for both)
+        context = build_budgeted_context(state, max_tokens=30)
+        self.assertIn("HIGH PRIORITY CHUNK CONTENT", context)
+        self.assertNotIn("LOW PRIORITY CHUNK", context)
+
+class TestRAGSelectiveIngestion(unittest.TestCase):
+    def test_rag_ingest_path_filtering_and_deterministic_ids(self):
+        self.assertTrue(should_skip_path("knowledge_base/react.dev/CONTRIBUTING.md"))
+        self.assertTrue(should_skip_path("knowledge_base/react.dev/CODE_OF_CONDUCT.md"))
+        self.assertTrue(should_skip_path("knowledge_base/react.dev/LICENSE.md"))
+        self.assertTrue(should_skip_path("knowledge_base/react.dev/.claude/settings.json"))
+        self.assertFalse(should_skip_path("knowledge_base/react.dev/src/content/reference/react/useState.md"))
+        self.assertFalse(should_skip_path("knowledge_base/react.dev/src/content/learn/describing-the-ui.md"))
+
+        id1 = get_deterministic_id("reference/react/useState.md", 0)
+        id2 = get_deterministic_id("reference/react/useState.md", 0)
+        id3 = get_deterministic_id("reference/react/useState.md", 1)
+        self.assertEqual(id1, id2)
+        self.assertNotEqual(id1, id3)
 
 if __name__ == "__main__":
     unittest.main()
