@@ -12,6 +12,7 @@ Covers:
    - .data.map and defensive array chaining
    - string .slice (preserving string slicing from array healer corruption)
    - comments (inline // and multi-line /* */ with quotes and braces)
+7. Delimited Block Parser & Targeted File Re-request Tests.
 """
 
 import os
@@ -31,6 +32,8 @@ from validators import (
     get_installed_lucide_exports
 )
 from agents.reviewer import reviewer_node
+from file_parser import parse_delimited_files
+from agents.coder import re_request_single_file
 
 
 # ==============================================================================
@@ -423,3 +426,56 @@ def test_reviewer_node_returns_structured_errors_list():
         assert "rule" in err
         assert err["rule"] in {"syntax", "route-contract", "import-allowlist", "package-json"}
         assert "message" in err
+
+
+# ==============================================================================
+# 7. DELIMITED BLOCK PARSER & FILE ASSEMBLY TESTS
+# ==============================================================================
+
+def test_delimited_parser_handles_nested_quotes_and_templates():
+    raw_output = """=== FILE: /server.js ===
+const express = require('express');
+const app = express();
+const msg = "Don't break on 'nested' \\"quotes\\" or `templates`";
+app.get('/api/test', (req, res) => res.json({ msg }));
+app.listen(5000);
+=== END FILE ===
+
+=== FILE: /services/api.js ===
+export const testApi = async () => {
+  const url = `http://localhost:5000/api/test`;
+  return fetch(url).then(r => r.json());
+};
+=== END FILE ==="""
+    parsed = parse_delimited_files(raw_output)
+    assert "/server.js" in parsed
+    assert "/services/api.js" in parsed
+    assert "nested" in parsed["/server.js"]
+    assert "testApi" in parsed["/services/api.js"]
+
+
+def test_delimited_parser_strips_markdown_fences():
+    raw_output = """=== FILE: /App.js ===
+```javascript
+import React from 'react';
+export default function App() {
+  return <h1>No Fences</h1>;
+}
+```
+=== END FILE ==="""
+    parsed = parse_delimited_files(raw_output)
+    assert "/App.js" in parsed
+    assert not parsed["/App.js"].startswith("```")
+    assert not parsed["/App.js"].endswith("```")
+    assert "No Fences" in parsed["/App.js"]
+
+
+def test_re_request_single_file_mock():
+    class MockLLM:
+        def invoke(self, messages):
+            class Resp:
+                content = "=== FILE: /server/package.json ===\n{\n  \"name\": \"server\"\n}\n=== END FILE ==="
+            return Resp()
+    recovered = re_request_single_file("/server/package.json", "Backend", "Test plan", "[]", MockLLM())
+    assert recovered is not None
+    assert '"name": "server"' in recovered
