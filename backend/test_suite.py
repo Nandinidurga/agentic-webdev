@@ -1,7 +1,7 @@
 """
 Unit Test Suite for Agentic IDE Backend
 Tests reviewer auto-healer, defensive guards, real LangGraph should_continue loop semantics,
-token-budgeted RAG context packing, and selective ingestion heuristics.
+token-budgeted RAG context packing, selective ingestion heuristics, and delimited file parsing.
 Run: python backend/test_suite.py
 """
 
@@ -12,7 +12,8 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from agents.reviewer import heal_frontend_code, reviewer_node
-from agents.coder import unescape_json_string, build_budgeted_context
+from agents.coder import build_budgeted_context
+from file_parser import parse_delimited_files
 from graph import should_continue, END
 from rag_ingest import should_skip_path, get_deterministic_id
 
@@ -123,11 +124,48 @@ class TestRealGraphLoopSemantics(unittest.TestCase):
             if "MAX_ATTEMPTS" in os.environ:
                 del os.environ["MAX_ATTEMPTS"]
 
-class TestCoderSanitizerAndBudgeting(unittest.TestCase):
-    def test_unescape_json_string(self):
-        raw = "Line 1\\nLine 2\\tIndented with \\\"quotes\\\" and \\\\ backslash"
-        expected = 'Line 1\nLine 2\tIndented with "quotes" and \\ backslash'
-        self.assertEqual(unescape_json_string(raw), expected)
+class TestDelimitedBlockParser(unittest.TestCase):
+    def test_parse_delimited_files_basic(self):
+        raw = """=== FILE: /server.js ===
+const express = require('express');
+const app = express();
+app.listen(5000);
+=== END FILE ===
+
+=== FILE: /package.json ===
+{
+  "name": "app"
+}
+=== END FILE ==="""
+        files = parse_delimited_files(raw)
+        self.assertIn("/server.js", files)
+        self.assertIn("/package.json", files)
+        self.assertIn("express()", files["/server.js"])
+        self.assertIn('"name": "app"', files["/package.json"])
+
+    def test_parse_delimited_files_with_code_fences(self):
+        raw = """=== FILE: /App.js ===
+```jsx
+export default function App() {
+  return <div>Test</div>;
+}
+```
+=== END FILE ==="""
+        files = parse_delimited_files(raw)
+        self.assertIn("/App.js", files)
+        self.assertFalse(files["/App.js"].startswith("```"))
+        self.assertIn("export default function App()", files["/App.js"])
+
+    def test_parse_delimited_files_implicit_termination(self):
+        # File 1 does not have explicit === END FILE ===
+        raw = """=== FILE: /server.js ===
+const port = 5000;
+=== FILE: /services/api.js ===
+export const api = {};
+=== END FILE ==="""
+        files = parse_delimited_files(raw)
+        self.assertEqual(files["/server.js"], "const port = 5000;")
+        self.assertEqual(files["/services/api.js"], "export const api = {};")
 
     def test_token_budgeting_prioritizes_high_scoring_chunks(self):
         state = {
