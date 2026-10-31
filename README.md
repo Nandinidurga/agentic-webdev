@@ -17,6 +17,12 @@ Agentic IDE is an autonomous full-stack web development studio that transforms n
   * `MAX_ATTEMPTS` configurable via environment variable (default: 3).
   * Returns `status: "partial"` with remaining errors if issues persist after the final coder attempt.
   * Reviewer regex auto-healer guarded cleanly behind `HEAL_REGEX=1` (default off).
+* **Deterministic AST & Static Validator Suite (`backend/validators.py`):**
+  * **JS Syntax Check:** Runs `node --check` for `server.js` and `esbuild` for `App.js` and `api.js` to pinpoint exact file and line syntax errors.
+  * **Route Contract Enforcement:** Parses `app.METHOD` route definitions, normalizes path parameters (`:id`), checks coverage against `api_spec`, and ensures every client URL in `services/api.js` maps to a registered server route.
+  * **Strict Import Whitelist:** Whitelists `react`, `react-dom`, `lucide-react`, `express`, `cors`, and local relative imports. Dynamically introspects installed `lucide-react` exports to reject hallucinated icons.
+  * **Strict package.json Verification:** Validates package descriptors with strict `json.loads` without blind single-quote rewriting.
+  * **Targeted Feedback:** Reviewer formats structured errors (`[{file, line, rule, message}]`) and feeds only those errors directly to the coder.
 * **API Security, Rate Limiting & Timeouts:**
   * Strict CORS policies driven by `FRONTEND_ORIGINS` (disallowing insecure wildcard + credentials combinations).
   * Built-in `slowapi` rate limiting on the `/generate` endpoint.
@@ -175,6 +181,13 @@ agentic-webdev/
 
 ---
 
+### Phase 6: Deterministic AST & Static Validators (Completed)
+- [x] Built `backend/check_syntax.js` with `esbuild` for JSX and JS syntax parsing.
+- [x] Built `backend/validators.py` enforcing syntax, route contracts, import allowlists, and package.json validity.
+- [x] Configured Reviewer node to return structured error objects `[{file, line, rule, message}]`.
+- [x] Fed only structured reviewer errors to Coder Agent prompt for targeted auto-correction.
+- [x] Added comprehensive pytest regression suite (`backend/test_validators.py`) covering await, `.data.map`, `string .slice`, and comments corruption cases.
+
 ## 🏃 Quickstart & Local Setup
 
 ### Prerequisites
@@ -244,6 +257,12 @@ Open [http://localhost:3000](http://localhost:3000) in your browser to begin cre
 ---
 
 ## 🧪 Testing & Verification
+
+### Running Static Validator Pytest Suite
+Execute the pytest regression test suite covering syntax errors, route contracts, import allowlists, package.json parsing, and regression corruptions:
+```bash
+pytest backend/test_validators.py
+```
 
 ### Running Backend Unit Tests
 Execute the automated unit test suite covering reviewer auto-healer, real LangGraph `should_continue` semantics, and sanitizers:
