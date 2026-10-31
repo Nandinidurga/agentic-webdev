@@ -17,6 +17,11 @@ Agentic IDE is an autonomous full-stack web development studio that transforms n
   * `MAX_ATTEMPTS` configurable via environment variable (default: 3).
   * Returns `status: "partial"` with remaining errors if issues persist after the final coder attempt.
   * Reviewer regex auto-healer guarded cleanly behind `HEAL_REGEX=1` (default off).
+* **Optimized Dual RAG & Token-Budgeted Context:**
+  * **Selective Upstream Sync:** `knowledge_base/react.dev` git-ignored with `scripts/fetch_react_docs.py` fetching only `src/content/reference` and `src/content/learn`.
+  * **Idempotent Ingestion (`backend/rag_ingest.py`):** Deterministic SHA-256 chunk IDs, selective paths, `domain="frontend"` metadata tagging, zero sleep stalls, and collection reset capabilities.
+  * **Chroma Singleton & Domain Filtering (`backend/agents/knowledge.py`):** Embeddings and `langchain-chroma` initialized once at startup; isolated retrieval via `{"domain": "backend"}` and `{"domain": "frontend"}` with configurable `RAG_K` and `RAG_SCORE_THRESHOLD`.
+  * **Token-Budgeted Context Packing (`backend/agents/coder.py`):** Prioritizes highest-scoring chunks within a token ceiling (`MAX_CONTEXT_TOKENS`) instead of arbitrary character slicing.
 * **Deterministic AST & Static Validator Suite (`backend/validators.py`):**
   * **JS Syntax Check:** Runs `node --check` for `server.js` and `esbuild` for `App.js` and `api.js` to pinpoint exact file and line syntax errors.
   * **Route Contract Enforcement:** Parses `app.METHOD` route definitions, normalizes path parameters (`:id`), checks coverage against `api_spec`, and ensures every client URL in `services/api.js` maps to a registered server route.
@@ -187,6 +192,13 @@ agentic-webdev/
 - [x] Configured Reviewer node to return structured error objects `[{file, line, rule, message}]`.
 - [x] Fed only structured reviewer errors to Coder Agent prompt for targeted auto-correction.
 - [x] Added comprehensive pytest regression suite (`backend/test_validators.py`) covering await, `.data.map`, `string .slice`, and comments corruption cases.
+
+### Phase 7: RAG Optimization, Singleton Chroma & Token Budgeting (Completed)
+- [x] Untracked `knowledge_base/react.dev` from git cache and added to `.gitignore`.
+- [x] Created `scripts/fetch_react_docs.py` for selective reference and learn documentation fetching.
+- [x] Overhauled `backend/rag_ingest.py` to be idempotent with deterministic SHA-256 chunk IDs, selective path filtering, frontend domain metadata, and zero sleeps.
+- [x] Upgraded `backend/agents/knowledge.py` to `langchain-chroma` with startup singleton vectorstore, domain filtering, and env-driven `RAG_K` and `RAG_SCORE_THRESHOLD`.
+- [x] Upgraded `backend/agents/coder.py` with token-budgeted context packing prioritizing top relevance-scoring chunks.
 
 ## 🏃 Quickstart & Local Setup
 
