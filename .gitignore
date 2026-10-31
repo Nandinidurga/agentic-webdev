@@ -35,6 +35,9 @@ chroma_db/
 backend/chroma_db/
 *.sqlite3
 
+# External Upstream Documentation
+knowledge_base/react.dev/
+
 # Export Bundles
 *.zip
 *.tar.gz
