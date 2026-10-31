@@ -1,5 +1,11 @@
 import os
 import re
+from typing import Dict, List, Any
+import sys
+
+# Ensure backend root is in Python path for local module imports
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+from validators import validate_all, StructuredError
 
 def heal_frontend_code(code: str) -> str:
     """
@@ -43,15 +49,20 @@ def reviewer_node(state):
     api_spec = state.get("api_spec", [])
     current_attempt = state.get("attempt", 0)
     
-    critical_errors = []
-    validation_logs = []
+    structured_errors: List[StructuredError] = []
+    validation_logs: List[str] = []
     
     if not files:
-        critical_errors.append("Critical: No files were generated or JSON could not be parsed.")
+        structured_errors.append({
+            "file": "general",
+            "line": 1,
+            "rule": "syntax",
+            "message": "Critical: No files were generated or JSON could not be parsed."
+        })
     else:
         validation_logs.append(f"Received {len(files)} total files ({len(backend_files)} backend, {len(frontend_files)} frontend).")
         
-        # 1. Validate Backend Files
+        # 1. Structural requirements: Backend Server
         server_code = None
         for path, code in files.items():
             if path.lower().endswith('server.js'):
@@ -59,33 +70,30 @@ def reviewer_node(state):
                 break
                 
         if not server_code:
-            critical_errors.append("Backend Error: Missing `/server.js`. The application must include an Express.js server.")
+            structured_errors.append({
+                "file": "/server.js",
+                "line": 1,
+                "rule": "route-contract",
+                "message": "Backend Error: Missing `/server.js`. The application must include an Express.js server."
+            })
         else:
             validation_logs.append("Backend Check: Found `/server.js`.")
-            
-            # Check for Express setup
             if "express" not in server_code:
-                critical_errors.append("Backend Error: `/server.js` does not import or require Express.")
-            if "cors" not in server_code:
-                validation_logs.append("Backend Warning: CORS middleware not detected in `/server.js`. Adding recommendation.")
+                structured_errors.append({
+                    "file": "/server.js",
+                    "line": 1,
+                    "rule": "route-contract",
+                    "message": "Backend Error: `/server.js` does not import or require Express."
+                })
             if "app.listen" not in server_code and "server.listen" not in server_code:
-                critical_errors.append("Backend Error: `/server.js` does not start the server using `app.listen(...)`.")
-            
-            # Check for planned API endpoints
-            if api_spec:
-                missing_routes = []
-                for endpoint in api_spec:
-                    path = endpoint.get("path", "")
-                    route_snippet = path.split("?")[0]
-                    if route_snippet and route_snippet not in server_code:
-                        missing_routes.append(f"{endpoint.get('method', 'GET')} {route_snippet}")
-                
-                if missing_routes and len(missing_routes) > len(api_spec) // 2:
-                    validation_logs.append(f"Backend Warning: Expected endpoints not explicitly in `/server.js`: {', '.join(missing_routes[:3])}.")
-                else:
-                    validation_logs.append("Backend Check: Endpoints verified against API specification.")
+                structured_errors.append({
+                    "file": "/server.js",
+                    "line": 1,
+                    "rule": "route-contract",
+                    "message": "Backend Error: `/server.js` does not start the server using `app.listen(...)`."
+                })
 
-        # 2. Validate Frontend Files
+        # 2. Structural requirements: Frontend Main Component
         app_code = files.get("/App.js") or files.get("App.js")
         if not app_code:
             for path, code in files.items():
@@ -94,26 +102,16 @@ def reviewer_node(state):
                     break
                     
         if not app_code:
-            critical_errors.append("Frontend Error: Missing main React component `/App.js`.")
+            structured_errors.append({
+                "file": "/App.js",
+                "line": 1,
+                "rule": "syntax",
+                "message": "Frontend Error: Missing main React component `/App.js`."
+            })
         else:
             validation_logs.append("Frontend Check: Found `/App.js`.")
-            if "export default" not in app_code and "export {" not in app_code:
-                validation_logs.append("Frontend Warning: `/App.js` does not have an explicit default export.")
 
-        # 3. Validate API Client Service
-        api_client_code = files.get("/services/api.js") or files.get("services/api.js")
-        if not api_client_code:
-            for path, code in files.items():
-                if "api.js" in path.lower():
-                    api_client_code = code
-                    break
-                    
-        if not api_client_code:
-            validation_logs.append("Frontend Note: `/services/api.js` was not found. Using fallback preview store.")
-        else:
-            validation_logs.append("Frontend Check: Found `/services/api.js` client module.")
-
-        # 4. Optional regex auto-heal for React components (behind HEAL_REGEX=1, default off)
+        # 3. Optional regex auto-heal for React components (behind HEAL_REGEX=1, default off)
         heal_regex_enabled = os.getenv("HEAL_REGEX", "0").strip().lower() in ("1", "true")
         if heal_regex_enabled:
             healed_count = 0
@@ -131,32 +129,26 @@ def reviewer_node(state):
             if healed_count > 0:
                 validation_logs.append(f"Auto-Healer: Injected runtime defensive guards into {healed_count} frontend file(s) via HEAL_REGEX.")
 
-        # 5. Auto-heal any package.json files (convert single quotes to valid JSON double quotes)
-        for path, code in list(files.items()):
-            if 'package.json' in path.lower() and isinstance(code, str):
-                cleaned_pkg = code.strip()
-                if "'" in cleaned_pkg and '"' not in cleaned_pkg:
-                    cleaned_pkg = cleaned_pkg.replace("'", '"')
-                    files[path] = cleaned_pkg
-                    if path in frontend_files:
-                        frontend_files[path] = cleaned_pkg
-                    if path in backend_files:
-                        backend_files[path] = cleaned_pkg
-                    validation_logs.append(f"Auto-Healer: Converted single quotes in `{path}` to valid JSON.")
+        # 4. Run full AST & static validators suite
+        # Rules: syntax (node --check / esbuild), route-contract, import-allowlist, package-json (strict json.loads)
+        static_errors = validate_all(files, api_spec)
+        structured_errors.extend(static_errors)
 
-    errors = "\n".join(critical_errors)
     execution_result = "\n".join(validation_logs)
     
-    if errors:
-        print(f"Reviewer identified critical issues (attempt {current_attempt}):\n{errors}")
+    if structured_errors:
+        err_summary = "\n".join([f"[{e['file']}:{e['line']}] ({e['rule']}) {e['message']}" for e in structured_errors])
+        print(f"Reviewer identified {len(structured_errors)} issues (attempt {current_attempt}):\n{err_summary}")
     else:
         print("Reviewer: Full-stack validation passed successfully!")
         execution_result += "\nAll full-stack validation checks passed."
 
     return {
         "execution_result": execution_result,
-        "backend_test_results": "Backend static validation complete." if not errors else errors,
-        "errors": errors,
+        "backend_test_results": "Backend static validation complete." if not structured_errors else "\n".join(
+            [f"[{e['file']}:{e['line']}] {e['message']}" for e in structured_errors]
+        ),
+        "errors": structured_errors,
         "files": files,
         "frontend_files": frontend_files,
         "backend_files": backend_files,
