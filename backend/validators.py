@@ -375,10 +375,11 @@ def validate_import_allowlist(files: Dict[str, str]) -> List[StructuredError]:
                 # For lucide-react: validate every named icon export
                 if pkg == "lucide-react" and "{" in clause:
                     named_block = clause[clause.find("{") + 1 : clause.rfind("}")]
-                    icons = [item.strip().split()[0] for item in named_block.split(",") if item.strip()]
-                    for icon in icons:
-                        # Clean alias e.g. "Trash2 as DeleteIcon"
-                        icon_name = icon.split("as")[0].strip()
+                    raw_items = [item.strip() for item in named_block.split(",") if item.strip()]
+                    for item in raw_items:
+                        # Clean alias e.g. "Trash2 as DeleteIcon" -> "Trash2"
+                        parts = re.split(r'\s+as\s+', item)
+                        icon_name = parts[0].strip()
                         if icon_name and icon_name not in lucide_exports:
                             errors.append({
                                 "file": file_path,
