@@ -52,10 +52,12 @@ def get_llm(temperature: float = 0.2):
     Returns a resilient LLM instance.
     Primary: Groq Cloud (open-source openai/gpt-oss-20b or llama-3.3-70b-versatile).
     Fallback: Google Gemini (gemini-1.5-flash with large token quota).
+    Configurable output ceiling via MAX_TOKENS env var (default: 8192).
     """
     groq_api_key = os.getenv("GROQ_API_KEY", "").strip()
     google_api_key = os.getenv("GOOGLE_API_KEY", "").strip()
     provider = os.getenv("LLM_PROVIDER", "").lower().strip()
+    max_tokens = int(os.getenv("MAX_TOKENS", "8192"))
 
     # Determine stable Gemini model
     gemini_model = os.getenv("LLM_MODEL", "gemini-1.5-flash").strip()
@@ -70,7 +72,7 @@ def get_llm(temperature: float = 0.2):
             gemini_llm = ChatGoogleGenerativeAI(
                 model=gemini_model,
                 temperature=temperature,
-                max_output_tokens=8192,
+                max_output_tokens=max_tokens,
                 google_api_key=google_api_key
             )
         except Exception as e:
@@ -86,7 +88,7 @@ def get_llm(temperature: float = 0.2):
                 "model": groq_model,
                 "temperature": temperature,
                 "groq_api_key": groq_api_key,
-                "max_tokens": 4096,
+                "max_tokens": max_tokens,
                 "max_retries": 1
             }
             if "gpt-oss" in groq_model.lower():
@@ -98,20 +100,20 @@ def get_llm(temperature: float = 0.2):
 
     # Return multi-provider ResilientLLM or appropriate active instance
     if groq_llm and gemini_llm:
-        print(f"[LLM Factory] Resilient Pipeline: Primary Groq ({os.getenv('GROQ_MODEL', 'openai/gpt-oss-20b')}) -> Fallback Gemini ({gemini_model})", flush=True)
+        print(f"[LLM Factory] Resilient Pipeline: Primary Groq ({os.getenv('GROQ_MODEL', 'openai/gpt-oss-20b')}) -> Fallback Gemini ({gemini_model}) [max_tokens={max_tokens}]", flush=True)
         return ResilientLLM(primary_llm=groq_llm, fallback_llm=gemini_llm)
     elif groq_llm:
-        print(f"[LLM Factory] Using Groq Cloud ({os.getenv('GROQ_MODEL', 'openai/gpt-oss-20b')})", flush=True)
+        print(f"[LLM Factory] Using Groq Cloud ({os.getenv('GROQ_MODEL', 'openai/gpt-oss-20b')}) [max_tokens={max_tokens}]", flush=True)
         return groq_llm
     elif gemini_llm:
-        print(f"[LLM Factory] Using Google Gemini ({gemini_model})", flush=True)
+        print(f"[LLM Factory] Using Google Gemini ({gemini_model}) [max_tokens={max_tokens}]", flush=True)
         return gemini_llm
 
     # If neither key is provided, instantiate fallback Gemini with default env lookup
     from langchain_google_genai import ChatGoogleGenerativeAI
-    print(f"[LLM Factory] Defaulting to Gemini ({gemini_model})", flush=True)
+    print(f"[LLM Factory] Defaulting to Gemini ({gemini_model}) [max_tokens={max_tokens}]", flush=True)
     return ChatGoogleGenerativeAI(
         model=gemini_model,
         temperature=temperature,
-        max_output_tokens=8192
+        max_output_tokens=max_tokens
     )
