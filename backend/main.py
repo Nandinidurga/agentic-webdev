@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 import os
 from dotenv import load_dotenv, find_dotenv
 
@@ -23,7 +23,20 @@ app.add_middleware(
 )
 
 class PromptRequest(BaseModel):
-    prompt: str
+    prompt: str = Field(
+        min_length=1,
+        max_length=5000,
+        description="A non-empty prompt describing the web application to generate."
+    )
+
+    @field_validator("prompt")
+    @classmethod
+    def validate_prompt(cls, value):
+        if not value.strip():
+            raise ValueError(
+                "Prompt cannot be empty or contain only whitespace."
+            )
+        return value
 
 @app.post("/generate")
 def generate_app(request: PromptRequest):
@@ -31,12 +44,12 @@ def generate_app(request: PromptRequest):
         from graph import create_graph
         graph = create_graph()
         initial_state = {"prompt": request.prompt, "iteration": 0}
-        
+
         # Run graph
         result = graph.invoke(initial_state)
-        
+
         return {
-            "status": "success", 
+            "status": "success",
             "message": "Workflow completed",
             "plan": result.get("plan"),
             "code": result.get("code"),
