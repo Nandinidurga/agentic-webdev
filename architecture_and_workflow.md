@@ -203,3 +203,37 @@ flowchart TD
 * **In-Browser Sandpack Sandbox:** Client-side React code executes inside an isolated iframe managed by Sandpack. No local Docker installation is required.
 * **Dual-Mode Client Architecture:** `/services/api.js` enables the generated app to run out-of-the-box inside the browser sandbox using in-memory mock data, while instantly connecting to `http://localhost:5000` when the user starts the local Express server.
 * **Zero Backend Bundle Pollution:** Backend files (`/server.js`, `/server/package.json`) are filtered out before reaching Sandpack, preventing Node.js module resolution errors in the browser.
+
+
+
+---
+
+## 7. Backend Services: Responsibilities & Communication
+
+The Agentic IDE uses two separate backend services that work together to provide full-stack application generation.
+
+### 7.1 FastAPI Backend (Port 8000)
+
+The FastAPI backend acts as the main orchestration gateway. It receives user prompts from the frontend studio and coordinates the multi-agent workflow.
+
+Responsibilities:
+- Accept application-generation requests through the `/generate` endpoint.
+- Coordinate the Orchestrator, Knowledge, Coder, and Reviewer agents.
+- Manage communication with the configured LLM providers.
+- Return generated application files and technical specifications to the frontend.
+
+### 7.2 Generated Express.js Backend (Port 5000)
+
+The Express.js backend is generated for the applications created by the IDE.
+
+Responsibilities:
+- Provide REST API endpoints for generated applications.
+- Handle application data and CRUD operations.
+- Support communication between the generated frontend and backend.
+- Provide an API health-check endpoint.
+
+### 7.3 Communication Between Services
+
+The frontend studio communicates with the FastAPI gateway for application generation. The generated application's API client can communicate with its Express.js backend when running locally.
+
+This separation keeps AI orchestration independent from the backend services generated for individual applications.
