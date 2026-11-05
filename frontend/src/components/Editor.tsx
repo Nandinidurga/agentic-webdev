@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useRef, useState } from "react";
-import MonacoEditor, { OnMount } from "@monaco-editor/react";
+import MonacoEditor, { type OnMount } from "@monaco-editor/react";
 import { Copy, Check, FileCode } from "lucide-react";
 
 interface EditorProps {
@@ -73,20 +73,29 @@ export default function Editor({
         <div className="h-9 px-3.5 bg-[#151826] border-b border-gray-800 flex items-center justify-between text-xs text-gray-300 shrink-0">
           <div className="flex items-center space-x-2">
             <FileCode className="w-3.5 h-3.5 text-blue-400" />
-            <span className="font-mono text-[11px] font-semibold text-gray-200">{filename}</span>
-            <span className="text-[10px] uppercase font-mono px-1.5 py-0.2 rounded bg-gray-800 text-gray-400 border border-gray-700">
+
+            <span className="font-mono text-[11px] font-semibold text-gray-200">
+              {filename}
+            </span>
+
+            <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-gray-800 text-gray-400 border border-gray-700">
               {activeLanguage}
             </span>
           </div>
+
           <button
             onClick={handleCopy}
-            className="flex items-center space-x-1 px-2 py-0.5 rounded text-[11px] text-gray-400 hover:text-white hover:bg-gray-800 transition"
+            disabled={!code}
+            className="flex items-center space-x-1 px-2 py-0.5 rounded text-[11px] text-gray-400 hover:text-white hover:bg-gray-800 transition disabled:opacity-40"
             title="Copy file contents"
+            aria-label="Copy file contents"
           >
             {copied ? (
               <>
                 <Check className="w-3 h-3 text-emerald-400" />
-                <span className="text-emerald-400 font-medium">Copied</span>
+                <span className="text-emerald-400 font-medium">
+                  Copied
+                </span>
               </>
             ) : (
               <>
@@ -101,7 +110,6 @@ export default function Editor({
       <div className="flex-1 relative min-h-[220px]">
         <MonacoEditor
           height={height}
-          defaultLanguage={activeLanguage}
           language={activeLanguage}
           value={code}
           theme="vs-dark"
@@ -112,7 +120,7 @@ export default function Editor({
             fontSize: 13,
             lineHeight: 20,
             wordWrap: "on",
-            readOnly: readOnly,
+            readOnly,
             scrollBeyondLastLine: false,
             automaticLayout: true,
             tabSize: 2,
