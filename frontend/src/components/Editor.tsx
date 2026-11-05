@@ -24,30 +24,47 @@ export default function Editor({
   const editorRef = useRef<any>(null);
   const [copied, setCopied] = useState(false);
 
-  // Auto-detect Monaco language mode from file extension if not explicitly provided
-  const detectLanguage = (name?: string, fallback: string = "javascript") => {
+  const detectLanguage = (
+    name?: string,
+    fallback: string = "javascript"
+  ) => {
     if (!name) return fallback;
+
     const lower = name.toLowerCase();
+
     if (lower.endsWith(".json")) return "json";
     if (lower.endsWith(".css")) return "css";
     if (lower.endsWith(".html")) return "html";
     if (lower.endsWith(".md")) return "markdown";
-    if (lower.endsWith(".ts") || lower.endsWith(".tsx")) return "typescript";
-    if (lower.endsWith(".js") || lower.endsWith(".jsx")) return "javascript";
+    if (lower.endsWith(".ts") || lower.endsWith(".tsx"))
+      return "typescript";
+    if (lower.endsWith(".js") || lower.endsWith(".jsx"))
+      return "javascript";
+    if (lower.endsWith(".py")) return "python";
+    if (lower.endsWith(".sql")) return "sql";
+
     return fallback;
   };
 
-  const activeLanguage = filename ? detectLanguage(filename, language) : language;
+  const activeLanguage = filename
+    ? detectLanguage(filename, language)
+    : language;
 
   const handleEditorDidMount: OnMount = (editor) => {
     editorRef.current = editor;
   };
 
-  const handleCopy = () => {
+  const handleCopy = async () => {
     if (!code) return;
-    navigator.clipboard.writeText(code);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopied(true);
+
+      setTimeout(() => setCopied(false), 2000);
+    } catch (error) {
+      console.error("Failed to copy code:", error);
+    }
   };
 
   return (
