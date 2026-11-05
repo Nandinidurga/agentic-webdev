@@ -19,7 +19,32 @@ export default function ExportButton({ rawFiles }: ExportButtonProps) {
       const zip = new JSZip();
 
       // Root README
-      const readmeContent = `# Full-Stack Application Bundle\nGenerated autonomously by Agentic IDE.\n\n## 📁 Architecture\n- \`/server\`: Node.js + Express REST API Backend\n- \`/client\`: React 19 + Tailwind Interactive Frontend\n\n## 🚀 Quickstart Guide\n\n### 1. Launch the Backend Server\n\`\`\`bash\ncd server\nnpm install\nnpm start\n\`\`\`\nServer runs at http://localhost:5000 with CORS and REST endpoints.\n\n### 2. Launch the Frontend Client\n\`\`\`bash\ncd client\nnpm install\nnpm start\n\`\`\`\nFrontend opens at http://localhost:3000 and connects to the backend on port 5000.\n`;
+      const readmeContent = [
+        "# Full-Stack Application Bundle",
+        "Generated autonomously by Agentic IDE.",
+        "",
+        "## 📁 Architecture",
+        "- `/server`: Node.js + Express REST API Backend",
+        "- `/client`: React 19 + Tailwind Interactive Frontend",
+        "",
+        "## 🚀 Quickstart Guide",
+        "",
+        "### 1. Launch the Backend Server",
+        "```bash",
+        "cd server",
+        "npm install",
+        "npm start",
+        "```",
+        "Server runs at http://localhost:5000 with CORS and REST endpoints.",
+        "",
+        "### 2. Launch the Frontend Client",
+        "```bash",
+        "cd client",
+        "npm install",
+        "npm start",
+        "```",
+        "Frontend opens at http://localhost:3000 and connects to the backend on port 5000."
+      ].join("\n");
       zip.file("README.md", readmeContent);
 
       const serverFolder = zip.folder("server");
