@@ -15,3 +15,4 @@ class AgentState(TypedDict, total=False):
     errors: List[Dict[str, Any]]
     iteration: int
     attempt: int
+    cancel_event: Any
