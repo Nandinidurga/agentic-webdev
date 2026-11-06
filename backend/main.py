@@ -4,13 +4,14 @@ Agentic Full-Stack Web Development Studio - Core FastAPI Backend
 Coordinates the multi-agent cognitive loop powered by LangGraph:
 - Orchestrator: System architecture & API specification planning
 - Knowledge Dual RAG: Context retrieval for backend and frontend libraries
-- Coder: High-fidelity generation of Node.js/Express and React code
+- Coder: High-fidelity parallel generation of Node.js/Express and React code
 - Reviewer: Deterministic AST & static validator suite with structured errors
 
 Security & Production Hardening:
 - slowapi rate limiting (configurable via RATE_LIMIT env var, default: 10/minute)
-- Async generation execution timeout (configurable via GENERATION_TIMEOUT env var, default: 120s)
-- Sanitized 500 error reporting (hiding internal exception stack traces, returning unique request_ids)
+- Async generation execution timeout (configurable via GENERATION_TIMEOUT env var, default: 180s per attempt)
+- Shared cancellation flag (threading.Event) ensuring 504 timeouts actually abort worker threads
+- Sanitized 500/504 error reporting (hiding internal exception stack traces, returning unique request_ids)
 - Safe CORS configuration parsed from FRONTEND_ORIGINS (no wildcard credentials)
 - Strict prompt validation via Pydantic field validators
 """
@@ -20,6 +21,7 @@ import time
 import uuid
 import logging
 import asyncio
+import threading
 from typing import Dict, Any, List, Optional
 from dotenv import load_dotenv
 
@@ -41,7 +43,7 @@ logger = logging.getLogger("agentic-studio")
 
 START_TIME = time.time()
 MAX_PROMPT_LENGTH = int(os.getenv("MAX_PROMPT_LENGTH", "4000"))
-GENERATION_TIMEOUT_SECONDS = int(os.getenv("GENERATION_TIMEOUT", "120"))
+GENERATION_TIMEOUT_SECONDS = int(os.getenv("GENERATION_TIMEOUT", "180"))
 
 # Initialize rate limiter
 limiter = Limiter(key_func=get_remote_address)
@@ -68,54 +70,54 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Lazy import graph to allow graceful fallback when LLM keys are absent
+_graph = None
+
+def get_graph():
+    global _graph
+    if _graph is None:
+        try:
+            from graph import create_graph
+            _graph = create_graph()
+        except Exception as e:
+            logger.error(f"Failed to initialize multi-agent LangGraph workflow: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Graph initialization failed: {e}"
+            )
+    return _graph
+
 class PromptRequest(BaseModel):
-    prompt: str = Field(
-        ..., 
-        description="Natural language description of the web application to engineer",
-        min_length=3,
-        max_length=MAX_PROMPT_LENGTH
-    )
+    prompt: str = Field(..., description="Application specification prompt", min_length=1)
 
     @field_validator("prompt")
     @classmethod
     def validate_prompt(cls, v: str) -> str:
-        cleaned = v.strip()
-        if not cleaned:
-            raise ValueError("Prompt cannot be empty or contain only whitespace.")
-        if len(cleaned) < 3:
-            raise ValueError("Prompt must be at least 3 characters long.")
-        return cleaned
-
-# Cached workflow graph
-_compiled_graph = None
-
-def get_graph():
-    global _compiled_graph
-    if _compiled_graph is None:
-        from graph import create_graph
-        _compiled_graph = create_graph()
-    return _compiled_graph
+        clean = v.strip()
+        if not clean:
+            raise ValueError("Prompt cannot be empty or whitespace only.")
+        if len(clean) > MAX_PROMPT_LENGTH:
+            raise ValueError(
+                f"Prompt length exceeds maximum allowed length of {MAX_PROMPT_LENGTH} characters "
+                f"(received {len(clean)} characters)."
+            )
+        return clean
 
 @app.get("/")
-def root():
-    """Root metadata endpoint."""
+def read_root():
     return {
-        "service": "Agentic Full-Stack Studio API",
+        "status": "online",
+        "service": "Agentic Full-Stack Studio Backend",
         "version": "2.1.0",
-        "status": "operational",
-        "endpoints": {
-            "generate": "POST /generate",
-            "health": "GET /health"
-        }
+        "docs": "/docs"
     }
 
 @app.get("/health")
 def health_check():
-    """Service health inspection endpoint."""
-    groq_configured = bool(os.getenv("GROQ_API_KEY", "").strip() and os.getenv("GROQ_API_KEY") != "gsk_your_groq_api_key_here")
-    gemini_configured = bool(os.getenv("GOOGLE_API_KEY", "").strip() and os.getenv("GOOGLE_API_KEY") != "your_gemini_api_key_here")
-    chroma_exists = os.path.exists(os.path.abspath(os.path.join(os.path.dirname(__file__), "chroma_db")))
-
+    groq_configured = bool(os.getenv("GROQ_API_KEY"))
+    gemini_configured = bool(os.getenv("GEMINI_API_KEY"))
+    chroma_exists = os.path.exists("./chroma_db")
+    
     return {
         "status": "healthy",
         "uptime": round(time.time() - START_TIME, 2),
@@ -140,16 +142,25 @@ async def generate_app(request: Request, body: PromptRequest):
     """
     Main agentic entry point: runs the LangGraph cognitive loop
     (Orchestrator -> Knowledge Dual RAG -> Coder -> Reviewer Static Validators).
-    Includes slowapi rate limiting, 120s execution timeout, and sanitized error responses.
+    Includes slowapi rate limiting, per-attempt generation timeout, and sanitized error responses.
     """
+    cancel_event = threading.Event()
+    max_attempts = int(os.getenv("MAX_ATTEMPTS", "3"))
+    attempt_timeout = float(GENERATION_TIMEOUT_SECONDS)
+    total_timeout = attempt_timeout * max_attempts + 30.0
+
     try:
         graph = get_graph()
-        initial_state = {"prompt": body.prompt, "attempt": 0}
+        initial_state = {
+            "prompt": body.prompt,
+            "attempt": 0,
+            "cancel_event": cancel_event
+        }
         
         # Run graph in worker thread with timeout enforcement
         result = await asyncio.wait_for(
             asyncio.to_thread(graph.invoke, initial_state),
-            timeout=float(GENERATION_TIMEOUT_SECONDS)
+            timeout=total_timeout
         )
         
         raw_errors = result.get("errors")
@@ -175,21 +186,25 @@ async def generate_app(request: Request, body: PromptRequest):
             "errors": errors_list,
             "attempt": result.get("attempt", 1)
         }
-    except asyncio.TimeoutError:
+    except (asyncio.TimeoutError, TimeoutError) as te:
+        cancel_event.set()
         req_id = str(uuid.uuid4())
-        logger.error(f"[Request ID {req_id}] Generation timed out after {GENERATION_TIMEOUT_SECONDS}s for prompt: {body.prompt[:80]}...")
+        logger.error(f"[Request ID {req_id}] Generation timed out: {te}")
         raise HTTPException(
             status_code=status.HTTP_504_GATEWAY_TIMEOUT,
             detail={
-                "message": f"Generation timed out after {GENERATION_TIMEOUT_SECONDS} seconds. Please try a more specific prompt or retry.",
+                "message": f"Generation timed out after {int(attempt_timeout)} seconds per-attempt budget. Please try a more specific prompt or retry.",
                 "request_id": req_id
             }
         )
     except ValueError as ve:
+        cancel_event.set()
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ve))
     except HTTPException:
+        cancel_event.set()
         raise
     except Exception as e:
+        cancel_event.set()
         req_id = str(uuid.uuid4())
         logger.error(f"[Request ID {req_id}] Unhandled error during application generation: {e}", exc_info=True)
         raise HTTPException(
