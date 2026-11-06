@@ -8,6 +8,7 @@ Run: python backend/test_suite.py
 import os
 import sys
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -16,6 +17,8 @@ from agents.coder import build_budgeted_context
 from file_parser import parse_delimited_files
 from graph import should_continue, END
 from rag_ingest import should_skip_path, get_deterministic_id
+from ingest_backend_docs import get_deterministic_backend_id
+import agents.knowledge as knowledge_mod
 
 class TestReviewerAutoHealer(unittest.TestCase):
     def test_heal_uninitialized_state(self):
@@ -167,6 +170,35 @@ export const api = {};
         self.assertEqual(files["/server.js"], "const port = 5000;")
         self.assertEqual(files["/services/api.js"], "export const api = {};")
 
+    def test_parse_delimited_files_readme_preserves_internal_code_fences(self):
+        # A README with an unclosed code snippet at the bottom must NOT lose its trailing fence
+        raw = """=== FILE: /README.md ===
+# My Quickstart
+```bash
+npm start
+```
+=== END FILE ==="""
+        files = parse_delimited_files(raw)
+        self.assertIn("/README.md", files)
+        self.assertTrue(files["/README.md"].endswith("```"))
+        self.assertIn("npm start", files["/README.md"])
+
+    def test_parse_delimited_files_wrapped_readme(self):
+        # An entire README wrapped in an outer ```markdown envelope must unwrap cleanly
+        raw = """=== FILE: /README.md ===
+```markdown
+# Outer Envelope
+```bash
+npm test
+```
+```
+=== END FILE ==="""
+        files = parse_delimited_files(raw)
+        self.assertIn("/README.md", files)
+        self.assertFalse(files["/README.md"].startswith("```markdown"))
+        self.assertTrue(files["/README.md"].endswith("```"))
+        self.assertIn("npm test", files["/README.md"])
+
     def test_token_budgeting_prioritizes_high_scoring_chunks(self):
         state = {
             "rag_chunks": [
@@ -188,11 +220,42 @@ class TestRAGSelectiveIngestion(unittest.TestCase):
         self.assertFalse(should_skip_path("knowledge_base/react.dev/src/content/reference/react/useState.md"))
         self.assertFalse(should_skip_path("knowledge_base/react.dev/src/content/learn/describing-the-ui.md"))
 
+        # Verify 'eslint' is NOT in SKIP_PATTERNS
+        self.assertFalse(should_skip_path("src/content/reference/react/eslint-plugin-react-hooks.md"))
+
         id1 = get_deterministic_id("reference/react/useState.md", 0)
         id2 = get_deterministic_id("reference/react/useState.md", 0)
         id3 = get_deterministic_id("reference/react/useState.md", 1)
         self.assertEqual(id1, id2)
         self.assertNotEqual(id1, id3)
+
+class TestBackendIdempotencyAndSingletonRetry(unittest.TestCase):
+    def test_backend_deterministic_chunk_ids(self):
+        id1 = get_deterministic_backend_id("express_api_guide.md", 0)
+        id2 = get_deterministic_backend_id("express_api_guide.md", 0)
+        id3 = get_deterministic_backend_id("express_api_guide.md", 1)
+        self.assertEqual(id1, id2)
+        self.assertNotEqual(id1, id3)
+
+    def test_knowledge_singleton_retries_after_failure(self):
+        # Reset module state
+        knowledge_mod._VECTORSTORE = None
+
+        # Simulate a transient failure
+        with patch("os.path.exists", return_value=False):
+            vs1 = knowledge_mod.get_vectorstore()
+            self.assertIsNone(vs1)
+            # Ensure _VECTORSTORE is not permanently poisoned
+            self.assertIsNone(knowledge_mod._VECTORSTORE)
+
+        # On subsequent call when directory exists, it attempts initialization (retries)
+        with patch("os.path.exists", return_value=True),              patch("langchain_huggingface.HuggingFaceEmbeddings"),              patch("langchain_chroma.Chroma", return_value="mock_vectorstore"):
+            vs2 = knowledge_mod.get_vectorstore()
+            self.assertEqual(vs2, "mock_vectorstore")
+
+        # Clean up
+        knowledge_mod._VECTORSTORE = None
+
 
 if __name__ == "__main__":
     unittest.main()
