@@ -15,7 +15,7 @@ import os
 
 from dotenv import find_dotenv, load_dotenv
 from langchain_chroma import Chroma
-from langchain_community.document_loaders import TextLoader
+from langchain_core.documents import Document
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
@@ -52,11 +52,9 @@ def ingest_backend_docs(reset_collection: bool = False):
     for file_path in md_files:
         try:
             source_name = os.path.basename(file_path)
-            loader = TextLoader(file_path, encoding='utf-8')
-            docs = loader.load()
-            for doc in docs:
-                doc.metadata["source"] = source_name
-                doc.metadata["domain"] = "backend"
+            with open(file_path, "r", encoding="utf-8") as f:
+                content = f.read()
+            docs = [Document(page_content=content, metadata={"source": source_name, "domain": "backend"})]
 
             chunks = text_splitter.split_documents(docs)
             for idx, chunk in enumerate(chunks):
