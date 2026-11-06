@@ -17,7 +17,7 @@ const rootDir = path.resolve(__dirname, '..');
 // Import JSZip from frontend node_modules
 import JSZip from '../frontend/node_modules/jszip/dist/jszip.min.js';
 // Import scaffold generator
-import { buildExportBundle } from '../frontend/src/utils/exportScaffold.ts';
+import { buildExportBundle } from '../frontend/src/utils/exportScaffold.js';
 
 async function run() {
   console.log('--- STARTING EXPORT SCAFFOLD INTEGRATION TEST ---');

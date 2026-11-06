@@ -110,9 +110,12 @@ The Vite development server opens at http://localhost:3000 with HMR and proxies 
 /**
  * Builds the complete dictionary of relative file paths and contents for zip export.
  * Ignores any model-generated package.json for the client and pins all dependencies.
+ *
+ * @param {Record<string, string>} rawFiles
+ * @returns {Record<string, string>}
  */
-export function buildExportBundle(rawFiles: Record<string, string>): Record<string, string> {
-  const bundle: Record<string, string> = {};
+export function buildExportBundle(rawFiles) {
+  const bundle = {};
 
   // 1. Root documentation
   bundle["README.md"] = ROOT_README;
@@ -165,7 +168,7 @@ export function buildExportBundle(rawFiles: Record<string, string>): Record<stri
   // Ensure client services/api.js exists
   if (!hasClientApi) {
     bundle["client/src/services/api.js"] = `export const api = {
-  get: async (url: string) => fetch(url).then(r => r.json())
+  get: async (url) => fetch(url).then(r => r.json())
 };
 export default api;
 `;
