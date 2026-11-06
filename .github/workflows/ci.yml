@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  backend:
+    name: Backend Lint & Test (ruff, pytest)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Set up Node.js for syntax validator
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt ruff
+
+      - name: Run Ruff Lint Check
+        run: |
+          ruff check backend/
+
+      - name: Run Pytest Suite
+        run: |
+          pytest backend/ -v
+
+  frontend:
+    name: Frontend Lint & Typecheck (eslint, tsc)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: |
+          npm install
+
+      - name: Run ESLint
+        working-directory: frontend
+        run: |
+          npm run lint
+
+      - name: Run TypeScript Typecheck (tsc)
+        working-directory: frontend
+        run: |
+          npx tsc --noEmit
