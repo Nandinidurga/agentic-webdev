@@ -13,16 +13,15 @@ Architecture:
 - Token-budgeted context packing prioritizing highest-scoring RAG chunks.
 """
 
-import os
-import json
-import re
 import concurrent.futures
+import json
+import os
 from concurrent.futures import ThreadPoolExecutor
-from typing import Dict, List, Any, Optional, Set
-from langchain_core.messages import SystemMessage, HumanMessage
-from llm_factory import get_llm
-from file_parser import parse_delimited_files
+from typing import Any
 
+from file_parser import parse_delimited_files
+from langchain_core.messages import HumanMessage, SystemMessage
+from llm_factory import get_llm
 
 REQUIRED_BACKEND_FILES = ["/server.js", "/server/package.json"]
 REQUIRED_FRONTEND_FILES = ["/App.js", "/services/api.js", "/package.json", "/styles.css"]
@@ -113,9 +112,9 @@ def is_backend_error(err: Any) -> bool:
     return "route" in err_str or "server" in err_str or "backend" in err_str
 
 
-def extract_files_from_errors(errors: List[Any], default_files: List[str]) -> List[str]:
+def extract_files_from_errors(errors: list[Any], default_files: list[str]) -> list[str]:
     """Extracts specific file paths explicitly named in structured errors."""
-    named_files: Set[str] = set()
+    named_files: set[str] = set()
     for err in errors:
         if isinstance(err, dict):
             f = str(err.get("file", "")).strip()
@@ -129,7 +128,7 @@ def extract_files_from_errors(errors: List[Any], default_files: List[str]) -> Li
     return sorted(list(named_files))
 
 
-def format_structured_errors(errors: List[Any]) -> str:
+def format_structured_errors(errors: list[Any]) -> str:
     """Formats structured error objects for LLM prompt injection."""
     if not errors:
         return "None"
@@ -148,9 +147,9 @@ def generate_backend(
     api_spec_str: str,
     formatted_errors: str,
     llm,
-    requested_files: Optional[List[str]] = None,
-    previous_files: Optional[Dict[str, str]] = None,
-    cancel_event: Optional[Any] = None
+    requested_files: list[str] | None = None,
+    previous_files: dict[str, str] | None = None,
+    cancel_event: Any | None = None
 ) -> str:
     """Generates Node.js/Express backend files in delimited format."""
     if cancel_event and cancel_event.is_set():
@@ -234,9 +233,9 @@ def generate_frontend(
     api_spec_str: str,
     formatted_errors: str,
     llm,
-    requested_files: Optional[List[str]] = None,
-    previous_files: Optional[Dict[str, str]] = None,
-    cancel_event: Optional[Any] = None
+    requested_files: list[str] | None = None,
+    previous_files: dict[str, str] | None = None,
+    cancel_event: Any | None = None
 ) -> str:
     """Generates React client files in delimited format."""
     if cancel_event and cancel_event.is_set():
@@ -327,8 +326,8 @@ def re_request_single_file(
     plan: str,
     api_spec_str: str,
     llm,
-    cancel_event: Optional[Any] = None
-) -> Optional[str]:
+    cancel_event: Any | None = None
+) -> str | None:
     """Targeted re-request when a single required file failed to parse or was omitted."""
     if cancel_event and cancel_event.is_set():
         return None
@@ -365,7 +364,7 @@ API Spec Reference:
     return None
 
 
-def coder_node(state: Dict[str, Any]) -> Dict[str, Any]:
+def coder_node(state: dict[str, Any]) -> dict[str, Any]:
     cancel_event = state.get("cancel_event")
     if cancel_event and cancel_event.is_set():
         raise TimeoutError("Coder execution aborted: shared cancel flag is active.")

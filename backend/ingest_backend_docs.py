@@ -9,15 +9,15 @@ Key Features:
 - Uses modern langchain_chroma.Chroma
 """
 
-import os
 import glob
 import hashlib
-from typing import List, Optional
-from langchain_community.document_loaders import TextLoader
-from langchain_text_splitters import RecursiveCharacterTextSplitter
+import os
+
+from dotenv import find_dotenv, load_dotenv
 from langchain_chroma import Chroma
+from langchain_community.document_loaders import TextLoader
 from langchain_huggingface import HuggingFaceEmbeddings
-from dotenv import load_dotenv, find_dotenv
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 load_dotenv(find_dotenv())
 
@@ -27,7 +27,7 @@ CHROMA_DB_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "chroma_
 
 def get_deterministic_backend_id(source_name: str, chunk_index: int) -> str:
     """Generates a stable, reproducible SHA-256 identifier for a backend document chunk."""
-    seed = f"backend:{source_name}:{chunk_index}".encode("utf-8")
+    seed = f"backend:{source_name}:{chunk_index}".encode()
     return hashlib.sha256(seed).hexdigest()
 
 
@@ -75,7 +75,7 @@ def ingest_backend_docs(reset_collection: bool = False):
         print("No chunks extracted. Aborting.", flush=True)
         return
 
-    print(f"Initializing local HuggingFace embedding model...", flush=True)
+    print("Initializing local HuggingFace embedding model...", flush=True)
     embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
 
     print(f"Connecting to ChromaDB at {CHROMA_DB_DIR}...", flush=True)

@@ -11,7 +11,8 @@ Architecture:
 """
 
 import os
-from typing import Optional, List, Dict, Any, Tuple
+from typing import Any
+
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -37,8 +38,8 @@ def get_vectorstore():
         return None
 
     try:
-        from langchain_huggingface import HuggingFaceEmbeddings
         from langchain_chroma import Chroma
+        from langchain_huggingface import HuggingFaceEmbeddings
 
         if _EMBEDDINGS is None:
             _EMBEDDINGS = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
@@ -62,7 +63,7 @@ def retrieve_domain_chunks(
     domain: str,
     k: int,
     score_threshold: float
-) -> List[Tuple[Any, float]]:
+) -> list[tuple[Any, float]]:
     """
     Executes similarity search with relevance scores and domain metadata filtering.
     Filters out any matches falling below the configured score threshold.
@@ -85,7 +86,7 @@ def retrieve_domain_chunks(
         return []
 
 
-def knowledge_node(state: Dict[str, Any]) -> Dict[str, Any]:
+def knowledge_node(state: dict[str, Any]) -> dict[str, Any]:
     """
     LangGraph agent node: retrieves relevant reference documentation for backend
     and frontend domains, filtering by domain metadata and relevance thresholds.

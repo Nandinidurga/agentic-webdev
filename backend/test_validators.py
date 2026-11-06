@@ -17,24 +17,19 @@ Covers:
 
 import os
 import sys
-import pytest
 
 # Ensure backend root is on Python sys.path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from validators import (
-    validate_syntax,
-    validate_route_contract,
-    validate_import_allowlist,
-    validate_package_json,
-    validate_all,
-    normalize_route_path,
-    get_installed_lucide_exports
-)
+from agents.coder import re_request_single_file
 from agents.reviewer import reviewer_node
 from file_parser import parse_delimited_files
-from agents.coder import re_request_single_file
-
+from validators import (
+    validate_import_allowlist,
+    validate_package_json,
+    validate_route_contract,
+    validate_syntax,
+)
 
 # ==============================================================================
 # 1. JS SYNTAX CHECK TESTS (node --check & esbuild)
@@ -630,8 +625,8 @@ def test_validator_unavailable_when_lucide_unresolved(monkeypatch):
 
 def test_validator_unavailable_when_esbuild_unresolved(monkeypatch):
     """When esbuild is unavailable, validate_syntax returns validator-unavailable warning."""
-    import subprocess
     import json
+    import subprocess
 
     class FakeCompletedProcess:
         returncode = 0

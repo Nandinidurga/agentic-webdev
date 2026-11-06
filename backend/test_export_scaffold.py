@@ -11,9 +11,7 @@ Tests:
 """
 
 import os
-import sys
 import subprocess
-import pytest
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 

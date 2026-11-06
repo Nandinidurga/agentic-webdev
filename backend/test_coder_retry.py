@@ -6,19 +6,20 @@ targeted file re-request, shared cancellation token, and per-attempt timeout.
 import os
 import sys
 import threading
-import pytest
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 # Ensure backend root is on path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from agents.coder import (
-    is_backend_error,
+    REQUIRED_BACKEND_FILES,
+    REQUIRED_FRONTEND_FILES,
+    coder_node,
     extract_files_from_errors,
     format_structured_errors,
-    coder_node,
-    REQUIRED_BACKEND_FILES,
-    REQUIRED_FRONTEND_FILES
+    is_backend_error,
 )
 
 

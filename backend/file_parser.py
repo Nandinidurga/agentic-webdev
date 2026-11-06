@@ -11,7 +11,6 @@ Includes Markdown-aware fence unwrapping that preserves inner code blocks in REA
 """
 
 import re
-from typing import Dict
 
 
 def strip_markdown_fences(body: str, is_markdown: bool = False) -> str:
@@ -58,7 +57,7 @@ def strip_markdown_fences(body: str, is_markdown: bool = False) -> str:
     return body
 
 
-def parse_delimited_files(text: str) -> Dict[str, str]:
+def parse_delimited_files(text: str) -> dict[str, str]:
     """
     Parses files emitted in delimited block format:
     === FILE: /path/to/file ===
@@ -71,7 +70,7 @@ def parse_delimited_files(text: str) -> Dict[str, str]:
     - Handles missing === END FILE === if next === FILE: block begins or EOF is reached.
     - Normalizes all output file keys to start with a leading slash.
     """
-    files: Dict[str, str] = {}
+    files: dict[str, str] = {}
     if not text or not isinstance(text, str):
         return files
 

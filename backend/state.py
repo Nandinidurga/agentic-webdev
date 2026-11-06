@@ -1,18 +1,19 @@
-from typing import TypedDict, List, Dict, Any, Optional
+from typing import Any, TypedDict
+
 
 class AgentState(TypedDict, total=False):
     prompt: str
     plan: str
-    api_spec: List[Dict[str, Any]]
+    api_spec: list[dict[str, Any]]
     context: str
-    rag_chunks: List[Dict[str, Any]]
+    rag_chunks: list[dict[str, Any]]
     code: str
-    backend_files: Dict[str, str]
-    frontend_files: Dict[str, str]
-    files: Dict[str, str]
+    backend_files: dict[str, str]
+    frontend_files: dict[str, str]
+    files: dict[str, str]
     execution_result: str
     backend_test_results: str
-    errors: List[Dict[str, Any]]
+    errors: list[dict[str, Any]]
     iteration: int
     attempt: int
     cancel_event: Any

@@ -15,19 +15,19 @@ Structured error format:
 {"file": str, "line": int, "rule": str, "message": str}
 """
 
+import json
 import os
 import re
-import json
-import tempfile
 import subprocess
-from typing import Dict, List, Any, Optional, Set, Tuple
+import tempfile
+from typing import Any
 
 # Type definition for structured errors
-StructuredError = Dict[str, Any]
+StructuredError = dict[str, Any]
 
 # Cache for lucide-react exports: None indicates uninitialized or unavailable
-_LUCIDE_EXPORTS_CACHE: Optional[Set[str]] = None
-_LUCIDE_RESOLVED: Optional[bool] = None
+_LUCIDE_EXPORTS_CACHE: set[str] | None = None
+_LUCIDE_RESOLVED: bool | None = None
 
 
 def remove_js_comments(code: str) -> str:
@@ -48,7 +48,7 @@ def remove_js_comments(code: str) -> str:
     return re.sub(pattern, replacer, code)
 
 
-def get_installed_lucide_exports() -> Optional[Set[str]]:
+def get_installed_lucide_exports() -> set[str] | None:
     """
     Introspects the locally installed lucide-react package exports using Node.js.
     Returns the set of exported icon and component names if resolved,
@@ -108,7 +108,7 @@ def normalize_route_path(path: str) -> str:
     return normalized if normalized.startswith('/') else f"/{normalized}"
 
 
-def extract_server_routes(server_code: str) -> Tuple[Set[Tuple[str, str]], Set[str]]:
+def extract_server_routes(server_code: str) -> tuple[set[tuple[str, str]], set[str]]:
     """
     Extracts all routes from Express.js server code, supporting:
     (a) Direct calls: app.get('/path', ...), router.post('/path', ...)
@@ -123,14 +123,14 @@ def extract_server_routes(server_code: str) -> Tuple[Set[Tuple[str, str]], Set[s
     """
     clean_code = remove_js_comments(server_code)
     
-    server_routes: Set[Tuple[str, str]] = set()
-    server_paths: Set[str] = set()
+    server_routes: set[tuple[str, str]] = set()
+    server_paths: set[str] = set()
 
     # Dictionary mapping identifier -> list of (method, raw_path)
-    object_routes: Dict[str, List[Tuple[str, str]]] = {}
+    object_routes: dict[str, list[tuple[str, str]]] = {}
     
     # List of (parent_ident, mount_prefix, child_ident)
-    mounts: List[Tuple[str, str, str]] = []
+    mounts: list[tuple[str, str, str]] = []
 
     # 1. Parse router mounts: app.use('/api', router) or parent.use('/prefix', child)
     mount_with_prefix = re.compile(
@@ -191,7 +191,7 @@ def extract_server_routes(server_code: str) -> Tuple[Set[Tuple[str, str]], Set[s
             object_routes[ident].append((method, path))
 
     # 4. Resolve mount prefixes
-    prefixes: Dict[str, List[str]] = {"app": [""]}
+    prefixes: dict[str, list[str]] = {"app": [""]}
     
     # Propagate prefixes across mounts (support nested routers)
     for _ in range(5):
@@ -228,14 +228,14 @@ def extract_server_routes(server_code: str) -> Tuple[Set[Tuple[str, str]], Set[s
     return server_routes, server_paths
 
 
-def validate_syntax(files: Dict[str, str]) -> List[StructuredError]:
+def validate_syntax(files: dict[str, str]) -> list[StructuredError]:
     """
     JS syntax checker:
     - For server.js: executes `node --check`
     - For App.js, api.js, and other frontend JS/JSX files: executes esbuild via backend/check_syntax.js
     Returns explicit 'validator-unavailable' warning when esbuild cannot be resolved.
     """
-    errors: List[StructuredError] = []
+    errors: list[StructuredError] = []
     checker_script = os.path.abspath(os.path.join(os.path.dirname(__file__), "check_syntax.js"))
 
     for file_path, code in files.items():
@@ -286,7 +286,7 @@ def validate_syntax(files: Dict[str, str]) -> List[StructuredError]:
                     "file": file_path,
                     "line": 1,
                     "rule": "syntax",
-                    "message": f"Execution failure during syntax check: {str(ex)}"
+                    "message": f"Execution failure during syntax check: {ex!s}"
                 })
             finally:
                 if os.path.exists(tmp_path):
@@ -347,7 +347,7 @@ def validate_syntax(files: Dict[str, str]) -> List[StructuredError]:
                     "file": file_path,
                     "line": 1,
                     "rule": "syntax",
-                    "message": f"Syntax validation failed: {str(ex)}"
+                    "message": f"Syntax validation failed: {ex!s}"
                 })
             finally:
                 if os.path.exists(tmp_path):
@@ -359,7 +359,7 @@ def validate_syntax(files: Dict[str, str]) -> List[StructuredError]:
     return errors
 
 
-def validate_route_contract(files: Dict[str, str], api_spec: Optional[List[Dict[str, Any]]] = None) -> List[StructuredError]:
+def validate_route_contract(files: dict[str, str], api_spec: list[dict[str, Any]] | None = None) -> list[StructuredError]:
     """
     Route contract check:
     - Extracts server routes with full router mounting (app.use) and route chaining (app.route).
@@ -368,7 +368,7 @@ def validate_route_contract(files: Dict[str, str], api_spec: Optional[List[Dict[
       * Resolves ${BASE}/api, ${API_URL}/api template strings.
       * Treats trailing ${...} as optional parameter (matches /path/:id OR /path).
     """
-    errors: List[StructuredError] = []
+    errors: list[StructuredError] = []
 
     # Locate server.js
     server_path = None
@@ -450,7 +450,7 @@ def validate_route_contract(files: Dict[str, str], api_spec: Optional[List[Dict[
             # Strip query string
             path_part = path_part.split('?')[0].strip()
 
-            candidate_paths: Set[str] = set()
+            candidate_paths: set[str] = set()
 
             if is_template:
                 # Check for trailing ${...} parameter
@@ -483,7 +483,7 @@ def validate_route_contract(files: Dict[str, str], api_spec: Optional[List[Dict[
     return errors
 
 
-def validate_import_allowlist(files: Dict[str, str]) -> List[StructuredError]:
+def validate_import_allowlist(files: dict[str, str]) -> list[StructuredError]:
     """
     Import allowlist validator:
     - Frontend allowed packages: react, react-dom, react-dom/client, lucide-react.
@@ -494,7 +494,7 @@ def validate_import_allowlist(files: Dict[str, str]) -> List[StructuredError]:
     - Local relative imports (starting with ./ or ../) are allowed.
     Unknown imports are structured errors.
     """
-    errors: List[StructuredError] = []
+    errors: list[StructuredError] = []
     lucide_exports = get_installed_lucide_exports()
 
     allowed_frontend_packages = {"react", "react-dom", "react-dom/client", "lucide-react"}
@@ -593,13 +593,13 @@ def validate_import_allowlist(files: Dict[str, str]) -> List[StructuredError]:
     return errors
 
 
-def validate_package_json(files: Dict[str, str]) -> List[StructuredError]:
+def validate_package_json(files: dict[str, str]) -> list[StructuredError]:
     """
     package.json validation:
     - Parses all package.json files strictly with json.loads.
     - If invalid, records structured error with exact line (no blind quote replacement).
     """
-    errors: List[StructuredError] = []
+    errors: list[StructuredError] = []
 
     for file_path, code in files.items():
         if not file_path.lower().endswith("package.json"):
@@ -634,11 +634,11 @@ def validate_package_json(files: Dict[str, str]) -> List[StructuredError]:
     return errors
 
 
-def validate_all(files: Dict[str, str], api_spec: Optional[List[Dict[str, Any]]] = None) -> List[StructuredError]:
+def validate_all(files: dict[str, str], api_spec: list[dict[str, Any]] | None = None) -> list[StructuredError]:
     """
     Runs all static validation rules and aggregates structured errors.
     """
-    all_errors: List[StructuredError] = []
+    all_errors: list[StructuredError] = []
     
     # 1. Package descriptor check
     all_errors.extend(validate_package_json(files))

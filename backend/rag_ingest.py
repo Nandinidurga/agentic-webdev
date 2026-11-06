@@ -11,15 +11,15 @@ Key Features:
 - Zero sleep stalls: runs local HuggingFace embeddings at maximum processing speed.
 """
 
-import os
 import glob
 import hashlib
-from typing import List, Dict, Any, Optional
-from langchain_community.document_loaders import TextLoader
-from langchain_text_splitters import RecursiveCharacterTextSplitter
+import os
+
+from dotenv import find_dotenv, load_dotenv
 from langchain_chroma import Chroma
+from langchain_community.document_loaders import TextLoader
 from langchain_huggingface import HuggingFaceEmbeddings
-from dotenv import load_dotenv, find_dotenv
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 load_dotenv(find_dotenv())
 
@@ -46,7 +46,7 @@ def should_skip_path(path: str) -> bool:
 
 def get_deterministic_id(source_path: str, chunk_index: int) -> str:
     """Generates a stable, reproducible SHA-256 identifier for a document chunk."""
-    seed = f"frontend:{source_path}:{chunk_index}".encode("utf-8")
+    seed = f"frontend:{source_path}:{chunk_index}".encode()
     return hashlib.sha256(seed).hexdigest()
 
 
