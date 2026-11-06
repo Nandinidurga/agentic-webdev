@@ -21,7 +21,7 @@ export default function Editor({
   filename,
   height = "100%",
 }: EditorProps) {
-  const editorRef = useRef<any>(null);
+  const editorRef = useRef<Parameters<OnMount>[0] | null>(null);
   const [copied, setCopied] = useState(false);
 
   const detectLanguage = (

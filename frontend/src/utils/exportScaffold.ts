@@ -162,6 +162,15 @@ export function buildExportBundle(rawFiles: Record<string, string>): Record<stri
     }
   }
 
+  // Ensure client services/api.js exists
+  if (!hasClientApi) {
+    bundle["client/src/services/api.js"] = `export const api = {
+  get: async (url: string) => fetch(url).then(r => r.json())
+};
+export default api;
+`;
+  }
+
   // Ensure server.js exists
   if (!hasServerJs) {
     bundle["server/server.js"] = `const express = require('express');

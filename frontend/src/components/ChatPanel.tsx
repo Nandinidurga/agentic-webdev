@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { ChatMessage, StructuredError } from "../types/studio";
 import { PRESET_PROMPTS } from "../hooks/useGenerate";
-import { Send, Sparkles, AlertCircle, CheckCircle2, ChevronRight, Terminal, RefreshCw } from "lucide-react";
+import { Send, Sparkles, AlertCircle, ChevronRight, Terminal, RefreshCw } from "lucide-react";
 
 interface ChatPanelProps {
   prompt: string;
