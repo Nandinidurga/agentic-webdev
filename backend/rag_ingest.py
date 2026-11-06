@@ -34,7 +34,7 @@ ALLOWED_SUBDIRS = [
 
 SKIP_PATTERNS = [
     "contributing", "code_of_conduct", "license", ".claude",
-    ".github", ".husky", "eslint", "package.json", "yarn.lock"
+    ".github", ".husky", "package.json", "yarn.lock"
 ]
 
 
