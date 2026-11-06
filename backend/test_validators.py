@@ -479,3 +479,176 @@ def test_re_request_single_file_mock():
     recovered = re_request_single_file("/server/package.json", "Backend", "Test plan", "[]", MockLLM())
     assert recovered is not None
     assert '"name": "server"' in recovered
+
+
+# ==============================================================================
+# 8. EXPRESS ROUTERS, CHAINING, MULTI-LINE IMPORTS & FALLBACK TESTS
+# ==============================================================================
+
+def test_route_contract_express_router_mounting():
+    """Verify Express router definitions with app.use('/prefix', router) prefix resolution."""
+    files = {
+        "/server.js": """
+const express = require('express');
+const app = express();
+const itemRouter = express.Router();
+
+itemRouter.get('/items', (req, res) => res.json([]));
+itemRouter.post('/items', (req, res) => res.json({ success: true }));
+itemRouter.delete('/items/:id', (req, res) => res.json({ deleted: true }));
+
+app.use('/api/v1', itemRouter);
+app.listen(5000);
+"""
+    }
+    api_spec = [
+        {"method": "GET", "path": "/api/v1/items"},
+        {"method": "POST", "path": "/api/v1/items"},
+        {"method": "DELETE", "path": "/api/v1/items/:id"}
+    ]
+    errors = validate_route_contract(files, api_spec)
+    assert errors == []
+
+
+def test_route_contract_app_route_chaining():
+    """Verify chained method declarations via app.route('/path').get().post().delete()."""
+    files = {
+        "/server.js": """
+const express = require('express');
+const app = express();
+
+app.route('/api/todos/:id')
+   .get((req, res) => res.json({ id: req.params.id }))
+   .put((req, res) => res.json({ updated: true }))
+   .delete((req, res) => res.json({ deleted: true }));
+
+app.listen(5000);
+"""
+    }
+    api_spec = [
+        {"method": "GET", "path": "/api/todos/:id"},
+        {"method": "PUT", "path": "/api/todos/:id"},
+        {"method": "DELETE", "path": "/api/todos/:id"}
+    ]
+    errors = validate_route_contract(files, api_spec)
+    assert errors == []
+
+
+def test_route_contract_client_base_url_and_trailing_param():
+    """Verify ${API_BASE}/api URLs and trailing ${id} as optional parameter."""
+    files = {
+        "/server.js": """
+const express = require('express');
+const app = express();
+app.get('/api/users', (req, res) => res.json([]));
+app.get('/api/users/:id', (req, res) => res.json({}));
+app.post('/api/users', (req, res) => res.json({}));
+app.listen(5000);
+""",
+        "/services/api.js": """
+const API_URL = 'http://localhost:5000';
+export const getUsers = () => fetch(`${API_URL}/api/users`).then(r => r.json());
+export const getUserById = (id) => fetch(`${API_URL}/api/users/${id}`).then(r => r.json());
+"""
+    }
+    api_spec = [
+        {"method": "GET", "path": "/api/users"},
+        {"method": "GET", "path": "/api/users/:id"},
+        {"method": "POST", "path": "/api/users"}
+    ]
+    errors = validate_route_contract(files, api_spec)
+    assert errors == []
+
+
+def test_route_contract_client_unmapped_template_url():
+    """Verify client URL template calling an unmapped backend endpoint reports an error."""
+    files = {
+        "/server.js": """
+const express = require('express');
+const app = express();
+app.get('/api/users', (req, res) => res.json([]));
+app.listen(5000);
+""",
+        "/services/api.js": """
+const BASE = 'http://localhost:5000';
+export const getComments = (postId) => fetch(`${BASE}/api/posts/${postId}/comments`);
+"""
+    }
+    api_spec = [{"method": "GET", "path": "/api/users"}]
+    errors = validate_route_contract(files, api_spec)
+    assert len(errors) == 1
+    assert errors[0]["rule"] == "route-contract"
+    assert "/api/posts/:param/comments" in errors[0]["message"] or "/api/posts" in errors[0]["message"]
+
+
+def test_import_allowlist_multiline_lucide_imports():
+    """Verify multi-line lucide-react import parsing and invalid icon detection."""
+    valid_files = {
+        "/App.js": """
+import React, { useState } from 'react';
+import {
+  CheckCircle,
+  AlertTriangle,
+  Trash2
+} from 'lucide-react';
+
+export default function App() { return <div>Test</div>; }
+"""
+    }
+    errors = validate_import_allowlist(valid_files)
+    assert errors == []
+
+    invalid_files = {
+        "/App.js": """
+import React from 'react';
+import {
+  CheckCircle,
+  NonExistentLucideIconXYZ123
+} from 'lucide-react';
+"""
+    }
+    errors = validate_import_allowlist(invalid_files)
+    assert len(errors) == 1
+    assert errors[0]["rule"] == "import-allowlist"
+    assert "NonExistentLucideIconXYZ123" in errors[0]["message"]
+    assert errors[0]["line"] == 5
+
+
+def test_validator_unavailable_when_lucide_unresolved(monkeypatch):
+    """When lucide-react cannot be resolved, return explicit validator-unavailable warning."""
+    import validators
+    monkeypatch.setattr(validators, "get_installed_lucide_exports", lambda: None)
+
+    files = {
+        "/App.js": "import { CheckCircle } from 'lucide-react';"
+    }
+    errors = validate_import_allowlist(files)
+    assert len(errors) == 1
+    assert errors[0]["rule"] == "validator-unavailable"
+    assert "lucide-react" in errors[0]["message"]
+
+
+def test_validator_unavailable_when_esbuild_unresolved(monkeypatch):
+    """When esbuild is unavailable, validate_syntax returns validator-unavailable warning."""
+    import subprocess
+    import json
+
+    class FakeCompletedProcess:
+        returncode = 0
+        stdout = json.dumps({
+            "valid": False,
+            "unavailable": True,
+            "errors": [],
+            "warning": "esbuild unavailable in environment"
+        })
+        stderr = ""
+
+    monkeypatch.setattr(subprocess, "run", lambda *args, **kwargs: FakeCompletedProcess())
+
+    files = {
+        "/App.js": "export default function App() { return <div>Test</div>; }"
+    }
+    errors = validate_syntax(files)
+    assert len(errors) == 1
+    assert errors[0]["rule"] == "validator-unavailable"
+    assert "esbuild" in errors[0]["message"]
