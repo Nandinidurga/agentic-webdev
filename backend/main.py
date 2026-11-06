@@ -16,23 +16,21 @@ Security & Production Hardening:
 - Strict prompt validation via Pydantic field validators
 """
 
+import asyncio
+import logging
 import os
+import threading
 import time
 import uuid
-import logging
-import asyncio
-import threading
-from typing import Dict, Any, List, Optional
+from typing import Any
+
 from dotenv import load_dotenv
-
-from fastapi import FastAPI, HTTPException, status, Request
+from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, field_validator
-
 from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 
 # Load environment configuration
 load_dotenv()
@@ -124,15 +122,14 @@ def health_check():
         "llm_providers": {
             "groq_configured": groq_configured,
             "gemini_configured": gemini_configured,
-            "active_model": os.getenv("GROQ_MODEL", "openai/gpt-oss-20b") if groq_configured else os.getenv("LLM_MODEL", "gemini-1.5-flash")
+            "active_model": os.getenv("GROQ_MODEL", "openai/gpt-oss-20b") if groq_configured else os.getenv("LLM_MODEL", "gemini-2.0-flash")
         },
         "rag_vector_store": {
             "chroma_db_present": chroma_exists
         },
         "config": {
             "max_attempts": int(os.getenv("MAX_ATTEMPTS", "3")),
-            "generation_timeout": GENERATION_TIMEOUT_SECONDS,
-            "heal_regex_enabled": os.getenv("HEAL_REGEX", "0").strip().lower() in ("1", "true")
+            "generation_timeout": GENERATION_TIMEOUT_SECONDS
         }
     }
 
@@ -164,7 +161,7 @@ async def generate_app(request: Request, body: PromptRequest):
         )
         
         raw_errors = result.get("errors")
-        errors_list: List[Any] = []
+        errors_list: list[Any] = []
         if isinstance(raw_errors, list):
             errors_list = raw_errors
         elif isinstance(raw_errors, str) and raw_errors.strip():
@@ -186,7 +183,7 @@ async def generate_app(request: Request, body: PromptRequest):
             "errors": errors_list,
             "attempt": result.get("attempt", 1)
         }
-    except (asyncio.TimeoutError, TimeoutError) as te:
+    except TimeoutError as te:
         cancel_event.set()
         req_id = str(uuid.uuid4())
         logger.error(f"[Request ID {req_id}] Generation timed out: {te}")

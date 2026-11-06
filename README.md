@@ -22,7 +22,7 @@ Agentic IDE is an autonomous full-stack web development studio that transforms n
   * Clean separation between cognitive architecture planning and coder execution runs (`attempt`).
   * `MAX_ATTEMPTS` configurable via environment variable (default: 3).
   * Returns `status: "partial"` with remaining errors if issues persist after the final coder attempt.
-  * Reviewer regex auto-healer guarded cleanly behind `HEAL_REGEX=1` (default off).
+  * Deterministic reviewer AST & static validation with structured error reporting.
 * **Delimited Block Code Generation & Parallel Generation:**
   * **Zero JSON Escaping:** Replaces single-giant-JSON with raw delimited blocks (`=== FILE: /path === ... === END FILE ===`), eliminating escaping errors and regex salvage.
   * **Parallel Backend & Frontend Generation:** Generates Node.js/Express backend and React frontend concurrently in two simultaneous LLM calls after planning, halving latency and doubling effective token throughput.
@@ -44,7 +44,7 @@ Agentic IDE is an autonomous full-stack web development studio that transforms n
   * Built-in `slowapi` rate limiting on the `/generate` endpoint.
   * Async 120-second generation timeout preventing unhandled agent thread stalls.
   * Sanitized 500 error responses masking internal stack traces while emitting traceable `request_id` values.
-* **Resilient Multi-Provider LLM Engine:** Primary high-speed execution with **Groq Cloud** (`openai/gpt-oss-20b` or `llama-3.3-70b-versatile`) with automated per-second backoff and seamless failover to **Google Gemini** (`gemini-1.5-flash`).
+* **Resilient Multi-Provider LLM Engine:** Primary high-speed execution with **Groq Cloud** (`openai/gpt-oss-20b` or `llama-3.3-70b-versatile`) with automated per-second backoff and seamless failover to **Google Gemini** (`gemini-2.0-flash`).
 * **Dual RAG Knowledge Base:** ChromaDB vector database housing both official React documentation and curated Express.js/REST engineering patterns via local HuggingFace embeddings (`all-MiniLM-L6-v2`).
 * **Celebration & Modern UX:** Micro-interactions, status pills, keyboard shortcuts (`Enter` to generate, `Shift+Enter` for new line), and celebratory confetti animations upon successful build.
 
@@ -61,7 +61,7 @@ flowchart TD
         Orchestrator[Orchestrator Agent\n• Architectural Plan\n• Structured API Specification]
         Knowledge[Dual RAG Knowledge Agent\n• ChromaDB Semantic Retrieval\n• React + Express Docs]
         Coder[Coder Agent\n• Express Server + CRUD Routes\n• React Components & Styles\n• Attempt Counter Tracking]
-        Reviewer[Reviewer Agent\n• Static Syntax & Route Check\n• Optional HEAL_REGEX=1 Guards\n• Bounded Retry Loop: attempt < MAX_ATTEMPTS]
+        Reviewer[Reviewer Agent\n• Static Syntax & Route Check\n• AST & Static Validator Suite\n• Bounded Retry Loop: attempt < MAX_ATTEMPTS]
     end
 
     subgraph LLM Resilience Engine
@@ -113,7 +113,7 @@ flowchart TD
 | **Backend Gateway** | FastAPI, Uvicorn, Pydantic, SlowAPI | High-throughput async REST server with rate limiting on port 8000 |
 | **Agent Framework** | LangGraph & LangChain | Directed cyclical multi-agent graph with bounded self-healing |
 | **Primary LLM** | Groq Cloud (`openai/gpt-oss-20b`, `llama-3.3-70b`) | Lightning-fast inference (sub-3s generation) with automated backoff |
-| **Fallback LLM** | Google Gemini (`gemini-1.5-flash`) | Deep reasoning model with large context window fallback |
+| **Fallback LLM** | Google Gemini (`gemini-2.0-flash`) | Deep reasoning model with large context window fallback |
 | **Vector Database** | ChromaDB | Persistent local semantic store for technical documentation |
 | **Embeddings** | HuggingFace (`sentence-transformers/all-MiniLM-L6-v2`) | Local, zero-cost semantic embedding pipeline |
 
@@ -128,7 +128,7 @@ agentic-webdev/
 │   │   ├── orchestrator.py          # Plans architecture & extracts structured REST API specs
 │   │   ├── knowledge.py             # Dual-domain RAG retrieval (React + Express)
 │   │   ├── coder.py                 # Generates full-stack files & tracks attempt counter
-│   │   └── reviewer.py              # Validates syntax & optional HEAL_REGEX guards
+│   │   └── reviewer.py              # Validates syntax & AST & static validation suite
 │   ├── chroma_db/                   # Chroma Vector DB storing chunked documentation
 │   ├── llm_factory.py               # Multi-provider ResilientLLM (Groq + Gemini fallback)
 │   ├── graph.py                     # Compiled LangGraph workflow with MAX_ATTEMPTS bound
@@ -197,8 +197,8 @@ agentic-webdev/
 
 ### Phase 5: Reliability, Security & Runtime Immunity (Completed)
 - [x] Integrated Groq Cloud as high-speed primary LLM (`openai/gpt-oss-20b`) with smart backoff retry.
-- [x] Implemented automatic fallback to Google Gemini (`gemini-1.5-flash`).
-- [x] Cleaned default reviewer path and placed regex healing behind `HEAL_REGEX=1`.
+- [x] Implemented automatic fallback to Google Gemini (`gemini-2.0-flash`).
+- [x] Deleted dead regex heal code; enforced strict AST & static validators.
 - [x] Added `slowapi` rate limiting and a 120s generation timeout to `/generate`.
 - [x] Configured environment-driven CORS origins via `FRONTEND_ORIGINS` removing wildcard + credentials combos.
 - [x] Sanitized 500 error responses with traceable `request_id`.
@@ -251,11 +251,10 @@ GROQ_MODEL=openai/gpt-oss-20b
 
 # Fallback LLM (Google Gemini)
 GOOGLE_API_KEY=your_gemini_api_key_here
-LLM_MODEL=gemini-1.5-flash
+LLM_MODEL=gemini-2.0-flash
 
 # Loop Semantics & Healer Controls
 MAX_ATTEMPTS=3
-HEAL_REGEX=0
 
 # Security & CORS
 FRONTEND_ORIGINS=http://localhost:3000,http://127.0.0.1:3000

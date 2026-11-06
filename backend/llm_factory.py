@@ -1,7 +1,8 @@
 import os
 import re
 import time
-from dotenv import load_dotenv, find_dotenv
+
+from dotenv import find_dotenv, load_dotenv
 
 load_dotenv(find_dotenv())
 
@@ -39,7 +40,7 @@ class ResilientLLM:
                     print(f"[ResilientLLM] Primary retry encountered: {retry_err}", flush=True)
 
             if self.fallback:
-                print(f"\n[ResilientLLM] Primary model unavailable. Seamlessly switching to Fallback LLM...", flush=True)
+                print("\n[ResilientLLM] Primary model unavailable. Seamlessly switching to Fallback LLM...", flush=True)
                 try:
                     return self.fallback.invoke(messages, **kwargs)
                 except Exception as fb_err:
@@ -51,7 +52,7 @@ def get_llm(temperature: float = 0.2):
     """
     Returns a resilient LLM instance.
     Primary: Groq Cloud (open-source openai/gpt-oss-20b or llama-3.3-70b-versatile).
-    Fallback: Google Gemini (gemini-1.5-flash with large token quota).
+    Fallback: Google Gemini (gemini-2.0-flash with large token quota).
     Configurable output ceiling via MAX_TOKENS env var (default: 8192).
     """
     groq_api_key = os.getenv("GROQ_API_KEY", "").strip()
@@ -60,9 +61,9 @@ def get_llm(temperature: float = 0.2):
     max_tokens = int(os.getenv("MAX_TOKENS", "8192"))
 
     # Determine stable Gemini model
-    gemini_model = os.getenv("LLM_MODEL", "gemini-1.5-flash").strip()
+    gemini_model = os.getenv("LLM_MODEL", "gemini-2.0-flash").strip()
     if gemini_model in ["gemini-3.6-flash", ""]:
-        gemini_model = "gemini-1.5-flash"
+        gemini_model = "gemini-2.0-flash"
 
     # Build Gemini instance if key is available
     gemini_llm = None
