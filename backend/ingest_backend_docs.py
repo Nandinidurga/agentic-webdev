@@ -1,8 +1,22 @@
+"""
+ingest_backend_docs.py - Idempotent documentation ingestion for Backend Node.js/Express docs.
+
+Key Features:
+- Scans knowledge_base/backend/*.md
+- Applies metadata domain="backend" and source=<filename>
+- Idempotent upsert via deterministic SHA-256 chunk IDs
+- Collection reset support via reset_collection parameter or --reset CLI flag
+- Uses modern langchain_chroma.Chroma
+"""
+
 import os
 import glob
+import hashlib
+from typing import List, Optional
 from langchain_community.document_loaders import TextLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_community.vectorstores import Chroma
+from langchain_chroma import Chroma
+from langchain_huggingface import HuggingFaceEmbeddings
 from dotenv import load_dotenv, find_dotenv
 
 load_dotenv(find_dotenv())
@@ -10,9 +24,20 @@ load_dotenv(find_dotenv())
 BACKEND_DOCS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "knowledge_base", "backend"))
 CHROMA_DB_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "chroma_db"))
 
-def ingest_backend_docs():
+
+def get_deterministic_backend_id(source_name: str, chunk_index: int) -> str:
+    """Generates a stable, reproducible SHA-256 identifier for a backend document chunk."""
+    seed = f"backend:{source_name}:{chunk_index}".encode("utf-8")
+    return hashlib.sha256(seed).hexdigest()
+
+
+def ingest_backend_docs(reset_collection: bool = False):
+    """
+    Scans backend documentation files, splits into chunks, applies domain='backend',
+    and writes to ChromaDB with deterministic IDs for idempotent ingestion.
+    """
     print(f"Scanning for backend documentation in: {BACKEND_DOCS_DIR}", flush=True)
-    
+
     md_files = glob.glob(os.path.join(BACKEND_DOCS_DIR, "*.md"))
     if not md_files:
         print("No backend markdown files found!", flush=True)
@@ -22,17 +47,27 @@ def ingest_backend_docs():
 
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=800, chunk_overlap=150)
     all_chunks = []
+    deterministic_ids = []
 
     for file_path in md_files:
         try:
+            source_name = os.path.basename(file_path)
             loader = TextLoader(file_path, encoding='utf-8')
             docs = loader.load()
             for doc in docs:
-                doc.metadata["source"] = os.path.basename(file_path)
+                doc.metadata["source"] = source_name
                 doc.metadata["domain"] = "backend"
+
             chunks = text_splitter.split_documents(docs)
-            print(f"Extracted {len(chunks)} chunks from {os.path.basename(file_path)}", flush=True)
-            all_chunks.extend(chunks)
+            for idx, chunk in enumerate(chunks):
+                chunk.metadata["source"] = source_name
+                chunk.metadata["domain"] = "backend"
+                chunk.metadata["chunk_index"] = idx
+                cid = get_deterministic_backend_id(source_name, idx)
+                all_chunks.append(chunk)
+                deterministic_ids.append(cid)
+
+            print(f"Extracted {len(chunks)} chunks from {source_name}", flush=True)
         except Exception as e:
             print(f"Error loading {file_path}: {e}", flush=True)
 
@@ -41,14 +76,32 @@ def ingest_backend_docs():
         return
 
     print(f"Initializing local HuggingFace embedding model...", flush=True)
-    from langchain_huggingface import HuggingFaceEmbeddings
     embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
 
-    print(f"Adding {len(all_chunks)} backend chunks into existing ChromaDB at {CHROMA_DB_DIR}...", flush=True)
-    vectorstore = Chroma(persist_directory=CHROMA_DB_DIR, embedding_function=embeddings)
-    vectorstore.add_documents(all_chunks)
+    print(f"Connecting to ChromaDB at {CHROMA_DB_DIR}...", flush=True)
+    vectorstore = Chroma(
+        persist_directory=CHROMA_DB_DIR,
+        embedding_function=embeddings,
+        collection_name="langchain"
+    )
 
-    print(f">>> SUCCESS: Successfully ingested {len(all_chunks)} backend chunks into RAG Vector Store! <<<", flush=True)
+    if reset_collection:
+        print("Reset collection requested. Clearing existing backend chunks...", flush=True)
+        try:
+            vectorstore.delete(where={"domain": "backend"})
+            print("Cleared existing backend documents from collection.")
+        except Exception as err:
+            print(f"Collection reset warning: {err}")
+
+    print(f"Adding {len(all_chunks)} backend chunks into ChromaDB with deterministic IDs (idempotent upsert)...", flush=True)
+    vectorstore.add_documents(documents=all_chunks, ids=deterministic_ids)
+
+    print(f">>> SUCCESS: Successfully ingested {len(all_chunks)} backend chunks into RAG Vector Store idempotently! <<<", flush=True)
+
 
 if __name__ == "__main__":
-    ingest_backend_docs()
+    import argparse
+    parser = argparse.ArgumentParser(description="Ingest Backend documentation into ChromaDB")
+    parser.add_argument("--reset", action="store_true", help="Reset existing backend chunks in collection")
+    args = parser.parse_args()
+    ingest_backend_docs(reset_collection=args.reset)
