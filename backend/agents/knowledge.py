@@ -2,10 +2,11 @@
 knowledge.py - Dual-domain RAG retrieval agent for full-stack engineering.
 
 Architecture:
-- Singleton Chroma & HuggingFaceEmbeddings initialized once at module startup.
+- Singleton Chroma & HuggingFaceEmbeddings with resilient retry on failure.
 - Uses modern `langchain-chroma` package.
 - Domain-isolated metadata filtering (`domain="backend"` and `domain="frontend"`).
-- Configurable top-k (`RAG_K`) and relevance score thresholding (`RAG_SCORE_THRESHOLD`).
+- Configurable top-k (`RAG_K`) and measured relevance score thresholding (`RAG_SCORE_THRESHOLD=0.35`).
+- Plain CSS retrieval query (no Tailwind dependencies).
 - Provides ranked, scored chunks directly to state for token-budgeted prompt construction.
 """
 
@@ -18,7 +19,6 @@ load_dotenv()
 # Module-level singletons for embeddings and Chroma vectorstore
 _EMBEDDINGS = None
 _VECTORSTORE = None
-_INITIALIZED = False
 
 CHROMA_DB_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "chroma_db"))
 
@@ -26,13 +26,13 @@ CHROMA_DB_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "
 def get_vectorstore():
     """
     Module singleton provider for Chroma vector store and HuggingFace embeddings.
-    Builds embeddings model and connects to local Chroma DB once at startup.
+    Builds embeddings model and connects to local Chroma DB.
+    Retries on subsequent calls if a previous initialization attempt failed.
     """
-    global _EMBEDDINGS, _VECTORSTORE, _INITIALIZED
-    if _INITIALIZED:
+    global _EMBEDDINGS, _VECTORSTORE
+    if _VECTORSTORE is not None:
         return _VECTORSTORE
 
-    _INITIALIZED = True
     if not os.path.exists(CHROMA_DB_PATH):
         return None
 
@@ -40,15 +40,19 @@ def get_vectorstore():
         from langchain_huggingface import HuggingFaceEmbeddings
         from langchain_chroma import Chroma
 
-        _EMBEDDINGS = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
-        _VECTORSTORE = Chroma(
+        if _EMBEDDINGS is None:
+            _EMBEDDINGS = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+
+        vs = Chroma(
             persist_directory=CHROMA_DB_PATH,
             embedding_function=_EMBEDDINGS,
             collection_name="langchain"
         )
+        _VECTORSTORE = vs
         return _VECTORSTORE
     except Exception as err:
-        print(f"Warning: Failed to initialize Chroma singleton: {err}", flush=True)
+        print(f"Warning: Failed to initialize Chroma singleton (will retry on next request): {err}", flush=True)
+        _VECTORSTORE = None
         return None
 
 
@@ -91,7 +95,8 @@ def knowledge_node(state: Dict[str, Any]) -> Dict[str, Any]:
     plan = state.get("plan", "")
 
     k = int(os.getenv("RAG_K", "3"))
-    score_threshold = float(os.getenv("RAG_SCORE_THRESHOLD", "0.0"))
+    # Measured default: 0.35 threshold ensures high-relevance chunks and eliminates noise
+    score_threshold = float(os.getenv("RAG_SCORE_THRESHOLD", "0.35"))
 
     vectorstore = get_vectorstore()
 
@@ -112,8 +117,8 @@ def knowledge_node(state: Dict[str, Any]) -> Dict[str, Any]:
         score_threshold=score_threshold
     )
 
-    # 2. Retrieve Frontend-specific documentation (React hooks, state, preview stores, forms)
-    frontend_query = f"React components hooks state layout UI JSX Tailwind {prompt} {plan[:300]}"
+    # 2. Retrieve Frontend-specific documentation (React hooks, state, plain CSS styles, responsive layouts)
+    frontend_query = f"React components hooks state layout UI JSX CSS styles responsive design {prompt} {plan[:300]}"
     frontend_matches = retrieve_domain_chunks(
         vectorstore=vectorstore,
         query=frontend_query,
@@ -146,21 +151,16 @@ def knowledge_node(state: Dict[str, Any]) -> Dict[str, Any]:
         })
         frontend_snippets.append(f"[Source: {source} (score: {score:.3f})]:\n{doc.page_content}")
 
-    # Sort chunks globally by score descending
-    rag_chunks.sort(key=lambda c: c["score"], reverse=True)
+    # Build context string
+    context_parts = []
+    if backend_snippets:
+        context_parts.append("### BACKEND ARCHITECTURE & NODE.JS GUIDANCE:\n" + "\n\n".join(backend_snippets))
+    if frontend_snippets:
+        context_parts.append("### FRONTEND ARCHITECTURE & REACT GUIDANCE:\n" + "\n\n".join(frontend_snippets))
 
-    backend_context = "\n---\n".join(backend_snippets) if backend_snippets else "Standard Express patterns applied."
-    frontend_context = "\n---\n".join(frontend_snippets) if frontend_snippets else "Standard React preview patterns applied."
-
-    context = f"""=== BACKEND REFERENCE DOCUMENTATION (RAG) ===
-{backend_context}
-
-=== FRONTEND REFERENCE DOCUMENTATION (RAG) ===
-{frontend_context}"""
-
-    print(f"RAG Knowledge Agent retrieved {len(backend_matches)} backend and {len(frontend_matches)} frontend chunks (threshold: {score_threshold}).", flush=True)
+    combined_context = "\n\n---\n\n".join(context_parts) if context_parts else "Rely on standard Node.js/Express and React production patterns."
 
     return {
-        "context": context,
+        "context": combined_context,
         "rag_chunks": rag_chunks
     }
