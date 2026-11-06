@@ -12,54 +12,16 @@ from unittest.mock import patch
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from agents.reviewer import heal_frontend_code, reviewer_node
-from agents.coder import build_budgeted_context
-from file_parser import parse_delimited_files
-from graph import should_continue, END
-from rag_ingest import should_skip_path, get_deterministic_id
-from ingest_backend_docs import get_deterministic_backend_id
 import agents.knowledge as knowledge_mod
+from agents.coder import build_budgeted_context
+from agents.reviewer import reviewer_node
+from file_parser import parse_delimited_files
+from graph import END, should_continue
+from ingest_backend_docs import get_deterministic_backend_id
+from rag_ingest import get_deterministic_id, should_skip_path
 
-class TestReviewerAutoHealer(unittest.TestCase):
-    def test_heal_uninitialized_state(self):
-        input_code = "const [items, setItems] = useState();\nconst [data, setData] = useState(undefined);"
-        healed = heal_frontend_code(input_code)
-        self.assertIn("useState([])", healed)
-        self.assertNotIn("useState()", healed)
-        self.assertNotIn("useState(undefined)", healed)
 
-    def test_heal_defensive_array_map(self):
-        input_code = "return items.map(item => <div>{item.name}</div>);"
-        healed = heal_frontend_code(input_code)
-        self.assertIn("(items || []).map(", healed)
-
-    def test_heal_defensive_to_fixed(self):
-        input_code = "<span>{expense.amount.toFixed(2)}</span>"
-        healed = heal_frontend_code(input_code)
-        self.assertIn("(Number(expense.amount) || 0).toFixed(2)", healed)
-
-    def test_heal_regex_env_flag_behavior(self):
-        # 1. Default (HEAL_REGEX unset / "0"): frontend code is NOT regex-healed
-        os.environ["HEAL_REGEX"] = "0"
-        raw_code = "const [items, setItems] = useState(); return items.map(x => x);"
-        state = {
-            "files": {
-                "/server.js": "const express = require('express'); const app = express(); app.listen(5000);",
-                "/App.js": raw_code
-            },
-            "attempt": 1
-        }
-        res_default = reviewer_node(state)
-        self.assertEqual(res_default["files"]["/App.js"], raw_code)
-
-        # 2. When HEAL_REGEX="1": frontend code is regex-healed
-        os.environ["HEAL_REGEX"] = "1"
-        res_healed = reviewer_node(state)
-        self.assertIn("useState([])", res_healed["files"]["/App.js"])
-        self.assertIn("(items || []).map(", res_healed["files"]["/App.js"])
-        # Reset env
-        os.environ["HEAL_REGEX"] = "0"
-
+class TestReviewerValidation(unittest.TestCase):
     def test_reviewer_passes_valid_code(self):
         valid_state = {
             "prompt": "Test app",
