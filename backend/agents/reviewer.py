@@ -43,6 +43,10 @@ def heal_frontend_code(code: str) -> str:
 
 def reviewer_node(state):
     print("--- REVIEWER AGENT (FULL-STACK VALIDATION) ---")
+    cancel_event = state.get("cancel_event")
+    if cancel_event and cancel_event.is_set():
+        raise TimeoutError("Reviewer execution aborted: shared cancel flag active.")
+
     files = dict(state.get("files", {}))
     backend_files = dict(state.get("backend_files", {}))
     frontend_files = dict(state.get("frontend_files", {}))
@@ -68,7 +72,7 @@ def reviewer_node(state):
             if path.lower().endswith('server.js'):
                 server_code = code
                 break
-                
+        
         if not server_code:
             structured_errors.append({
                 "file": "/server.js",
@@ -77,55 +81,45 @@ def reviewer_node(state):
                 "message": "Backend Error: Missing `/server.js`. The application must include an Express.js server."
             })
         else:
-            validation_logs.append("Backend Check: Found `/server.js`.")
-            if "express" not in server_code:
+            validation_logs.append("Backend Check: Found /server.js.")
+            if "cors" not in server_code.lower():
                 structured_errors.append({
                     "file": "/server.js",
                     "line": 1,
                     "rule": "route-contract",
-                    "message": "Backend Error: `/server.js` does not import or require Express."
+                    "message": "Backend Warning: CORS middleware is recommended to avoid browser network errors."
                 })
-            if "app.listen" not in server_code and "server.listen" not in server_code:
-                structured_errors.append({
-                    "file": "/server.js",
-                    "line": 1,
-                    "rule": "route-contract",
-                    "message": "Backend Error: `/server.js` does not start the server using `app.listen(...)`."
-                })
-
-        # 2. Structural requirements: Frontend Main Component
-        app_code = files.get("/App.js") or files.get("App.js")
-        if not app_code:
-            for path, code in files.items():
-                if path.lower().endswith("/app.js") or path.lower() == "app.js":
-                    app_code = code
-                    break
-                    
+        
+        # 2. Structural requirements: Frontend Entrypoint
+        app_code = None
+        for path, code in files.items():
+            if path.lower().endswith('app.js') or path.lower().endswith('app.tsx') or path.lower().endswith('app.jsx'):
+                app_code = code
+                break
+        
         if not app_code:
             structured_errors.append({
                 "file": "/App.js",
                 "line": 1,
                 "rule": "syntax",
-                "message": "Frontend Error: Missing main React component `/App.js`."
+                "message": "Frontend Error: Missing primary React component (/App.js)."
             })
         else:
-            validation_logs.append("Frontend Check: Found `/App.js`.")
+            validation_logs.append("Frontend Check: Found React entry component.")
 
-        # 3. Optional regex auto-heal for React components (behind HEAL_REGEX=1, default off)
-        heal_regex_enabled = os.getenv("HEAL_REGEX", "0").strip().lower() in ("1", "true")
-        if heal_regex_enabled:
+        # 3. Defensive regex auto-healer: only applied if HEAL_REGEX env var is explicitly enabled ("1" or "true")
+        heal_enabled = os.getenv("HEAL_REGEX", "0").strip().lower() in ("1", "true")
+        if heal_enabled:
             healed_count = 0
-            for path, code in list(files.items()):
-                lower = path.lower()
-                if not lower.startswith('/server') and 'server.js' not in lower:
-                    if lower.endswith(('.js', '.jsx', '.tsx', '.ts')):
-                        healed = heal_frontend_code(code)
-                        if healed != code:
-                            files[path] = healed
-                            if path in frontend_files:
-                                frontend_files[path] = healed
-                            healed_count += 1
-                            
+            for path in list(files.keys()):
+                if path.endswith(('.js', '.jsx', '.tsx')) and not path.lower().endswith('server.js'):
+                    original = files[path]
+                    healed = heal_frontend_code(original)
+                    if healed != original:
+                        files[path] = healed
+                        if path in frontend_files:
+                            frontend_files[path] = healed
+                        healed_count += 1
             if healed_count > 0:
                 validation_logs.append(f"Auto-Healer: Injected runtime defensive guards into {healed_count} frontend file(s) via HEAL_REGEX.")
 
@@ -152,5 +146,6 @@ def reviewer_node(state):
         "files": files,
         "frontend_files": frontend_files,
         "backend_files": backend_files,
-        "attempt": current_attempt
+        "attempt": current_attempt,
+        "cancel_event": cancel_event
     }

@@ -7,6 +7,11 @@ from agents.coder import coder_node
 from agents.reviewer import reviewer_node
 
 def should_continue(state):
+    cancel_event = state.get("cancel_event")
+    if cancel_event and cancel_event.is_set():
+        print("Workflow execution aborted: shared cancel flag active, terminating loop.")
+        return END
+
     errors = state.get("errors")
     attempt = state.get("attempt", 0)
     max_attempts = int(os.getenv("MAX_ATTEMPTS", "3"))
