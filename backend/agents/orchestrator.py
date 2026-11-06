@@ -19,8 +19,9 @@ You must design:
    - RESTful API endpoints covering full CRUD operations (e.g. GET /api/items, POST /api/items, PUT /api/items/:id, DELETE /api/items/:id, plus GET /api/health).
    - Input validation, clear error responses, and proper HTTP status codes.
 
-2. FRONTEND ARCHITECTURE (React + Tailwind CSS):
+2. FRONTEND ARCHITECTURE (React + Plain CSS):
    - Interactive UI components (main App.js, modular components, responsive layout).
+   - Clean, modern Plain CSS styling in `/styles.css` using CSS variables, flexbox/grid layouts, cards, and animations (do NOT use Tailwind CSS or external CSS utility frameworks).
    - API client module (`services/api.js`) to consume backend endpoints with fallback data for preview.
    - State management, loading states, and optimistic or reactive UI updates.
 
@@ -59,47 +60,29 @@ Output a clear, professional Markdown document containing the complete full-stac
     
     # Extract api_spec
     api_spec = []
-    try:
-        spec_match = re.search(r"```(?:json:api_spec|json)?\s*(\[[\s\S]*?\])\s*```", content)
-        if spec_match:
-            api_spec = json.loads(spec_match.group(1))
-        else:
-            # Look for any JSON array containing "path" or "method"
-            json_arrays = re.findall(r"(\[\s*\{[\s\S]*?\}\s*\])", content)
-            for raw_arr in json_arrays:
-                try:
-                    parsed = json.loads(raw_arr)
-                    if isinstance(parsed, list) and len(parsed) > 0 and ("path" in parsed[0] or "method" in parsed[0]):
-                        api_spec = parsed
-                        break
-                except Exception:
-                    continue
-    except Exception as e:
-        print(f"Orchestrator warning: JSON parse error: {e}")
-
-    # If still empty, automatically extract endpoints mentioned in text with regex
+    
+    # Match ```json:api_spec ... ``` or ```json ... ``` containing API specs
+    match = re.search(r"```(?:json:api_spec|json)\s*\n(.*?)```", content, re.DOTALL)
+    if match:
+        try:
+            parsed = json.loads(match.group(1).strip())
+            if isinstance(parsed, list):
+                api_spec = parsed
+        except json.JSONDecodeError:
+            pass
+            
+    # Fallback heuristic: search for any JSON array with 'method' and 'path'
     if not api_spec:
-        found_routes = re.findall(r"\b(GET|POST|PUT|DELETE|PATCH)\s+([/a-zA-Z0-9_:\-]+)", content)
-        if found_routes:
-            seen = set()
-            for method, path in found_routes:
-                if path.startswith("/api") and (method, path) not in seen:
-                    seen.add((method, path))
-                    api_spec.append({
-                        "method": method,
-                        "path": path,
-                        "description": f"{method} {path} endpoint"
-                    })
-
-    if not api_spec:
-        api_spec = [
-            {"method": "GET", "path": "/api/health", "description": "Backend healthcheck", "sampleResponse": {"status": "ok"}},
-            {"method": "GET", "path": "/api/items", "description": "Retrieve items", "sampleResponse": []},
-            {"method": "POST", "path": "/api/items", "description": "Create item", "sampleResponse": {"success": True}}
-        ]
-
-        
-    print(f"Orchestrator identified {len(api_spec)} API endpoints.")
+        array_match = re.search(r"\[\s*\{\s*\"method\".*?\}\s*\]", content, re.DOTALL)
+        if array_match:
+            try:
+                parsed = json.loads(array_match.group(0))
+                if isinstance(parsed, list):
+                    api_spec = parsed
+            except json.JSONDecodeError:
+                pass
+                
+    print(f"Orchestrator planned {len(api_spec)} API endpoints.")
     
     return {
         "plan": content,

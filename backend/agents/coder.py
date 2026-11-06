@@ -196,7 +196,7 @@ REQUIRED BACKEND FILES:
    * MUST implement all REST endpoints from the API specification (GET all, GET by id, POST create, PUT/PATCH update, DELETE).
    * MUST include `GET /api/health` returning `{{ status: "ok", uptime: process.uptime() }}`.
    * MUST start the server: `const PORT = process.env.PORT || 5000; app.listen(PORT, () => console.log('Server running on port ' + PORT));`.
-2. `/server/package.json`: Valid JSON package descriptor with "dependencies": {{ "express": "^4.19.2", "cors": "^2.8.5" }} and "scripts": {{ "start": "node server.js" }}.
+2. `/server/package.json`: Valid JSON package descriptor with "dependencies": {{ "express": "4.19.2", "cors": "2.8.5" }} and "scripts": {{ "start": "node server.js" }}.
 3. `/README.md`: Quickstart instructions on running backend (`cd server && npm install && npm start`).
 
 CRITICAL FORMAT RULES:
@@ -284,8 +284,9 @@ REQUIRED FRONTEND FILES:
    * Initialize collections defensively: `const [items, setItems] = useState([]);`.
    * Defensive rendering: `(items || []).map(...)`. Format numbers safely: `(Number(item.amount) || 0).toFixed(2)`.
    * Rich interactive UI with filters, search, creation forms, data cards, and live API status badge.
-3. `/styles.css`: Modern styling with smooth transitions, cards, and buttons.
-4. `/package.json`: Client package.json specifying dependencies: {{ "dependencies": {{ "lucide-react": "latest" }} }}.
+   * Style components cleanly using Plain CSS classes from `./styles.css`. Do NOT use Tailwind CSS.
+3. `/styles.css`: Modern plain CSS styling with CSS variables, flexbox/grid layout, smooth transitions, cards, and buttons.
+4. `/package.json`: Client package.json specifying strictly pinned dependencies: {{ "dependencies": {{ "react": "18.3.1", "react-dom": "18.3.1", "lucide-react": "0.453.0" }} }}. Do NOT use caret (^), tilde (~), or 'latest'.
 
 CRITICAL FORMAT RULES:
 Emit each file inside delimited blocks without markdown commentary:
