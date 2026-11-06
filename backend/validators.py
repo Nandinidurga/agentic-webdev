@@ -3,8 +3,12 @@ validators.py - Comprehensive AST and static validation suite for full-stack app
 
 Enforces 4 core rules:
 1. syntax: JS syntax check via `node --check` (for server.js) and esbuild (for App.js/api.js).
+   Returns explicit "validator-unavailable" warning when esbuild is unreachable.
 2. route-contract: Verifies all api_spec endpoints and client URLs map to server.js routes.
-3. import-allowlist: Restricts packages to approved whitelist and validates lucide-react icon exports.
+   Resolves Express router mounting (app.use('/prefix', router)), route chaining (app.route().get().post()),
+   ${BASE}/api template URLs, and treats trailing ${...} as optional parameters.
+3. import-allowlist: Restricts packages to approved whitelist and validates multi-line lucide-react icon imports.
+   Returns explicit "validator-unavailable" warning when lucide-react exports cannot be resolved.
 4. package-json: Strict json.loads parsing for package descriptors without blind quote replacement.
 
 Structured error format:
@@ -21,17 +25,40 @@ from typing import Dict, List, Any, Optional, Set, Tuple
 # Type definition for structured errors
 StructuredError = Dict[str, Any]
 
-# Cache for lucide-react exports to avoid re-invoking node on every validation call
+# Cache for lucide-react exports: None indicates uninitialized or unavailable
 _LUCIDE_EXPORTS_CACHE: Optional[Set[str]] = None
+_LUCIDE_RESOLVED: Optional[bool] = None
 
-def get_installed_lucide_exports() -> Set[str]:
+
+def remove_js_comments(code: str) -> str:
+    """
+    Replaces comments with spaces and newlines so that character offsets
+    and line numbers are preserved. Preserves single, double, and template string literals.
+    """
+    def replacer(match):
+        s = match.group(0)
+        if s.startswith('/') and len(s) > 1 and (s[1] == '/' or s[1] == '*'):
+            return ''.join('\n' if c == '\n' else ' ' for c in s)
+        return s
+
+    pattern = re.compile(
+        r'//.*?$|/\*[\s\S]*?\*/|\'(?:\\.|[^\\\'])*\'|"(?:\\.|[^\\"])*"|`(?:\\.|[^\\`])*`',
+        re.DOTALL | re.MULTILINE
+    )
+    return re.sub(pattern, replacer, code)
+
+
+def get_installed_lucide_exports() -> Optional[Set[str]]:
     """
     Introspects the locally installed lucide-react package exports using Node.js.
-    Caches the resulting set of exported icon and component names.
+    Returns the set of exported icon and component names if resolved,
+    or None if lucide-react cannot be resolved.
     """
-    global _LUCIDE_EXPORTS_CACHE
-    if _LUCIDE_EXPORTS_CACHE is not None:
+    global _LUCIDE_EXPORTS_CACHE, _LUCIDE_RESOLVED
+    if _LUCIDE_RESOLVED is True and _LUCIDE_EXPORTS_CACHE is not None:
         return _LUCIDE_EXPORTS_CACHE
+    if _LUCIDE_RESOLVED is False:
+        return None
 
     possible_paths = [
         os.path.abspath(os.path.join(os.path.dirname(__file__), "../frontend/node_modules/lucide-react")),
@@ -41,30 +68,20 @@ def get_installed_lucide_exports() -> Set[str]:
 
     for mod_path in possible_paths:
         try:
-            # Escape backslashes for node -e on Windows
             clean_path = mod_path.replace("\\", "/")
             cmd = ["node", "-e", f"try {{ const l = require('{clean_path}'); console.log(JSON.stringify(Object.keys(l))); }} catch(e) {{ console.log('[]'); }}"]
             res = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
             if res.returncode == 0 and res.stdout.strip():
                 exports_list = json.loads(res.stdout.strip())
-                if exports_list:
+                if exports_list and len(exports_list) > 10:
                     _LUCIDE_EXPORTS_CACHE = set(exports_list)
+                    _LUCIDE_RESOLVED = True
                     return _LUCIDE_EXPORTS_CACHE
         except Exception:
             continue
 
-    # Fallback to standard common icon names if node cannot resolve
-    _LUCIDE_EXPORTS_CACHE = {
-        "Plus", "Trash2", "Trash", "Edit", "Edit2", "Edit3", "Check", "CheckCircle",
-        "X", "XCircle", "AlertCircle", "AlertTriangle", "Search", "Filter", "Download",
-        "Upload", "Eye", "EyeOff", "Menu", "Settings", "User", "Users", "Mail", "Phone",
-        "Calendar", "Clock", "ArrowRight", "ArrowLeft", "ArrowUp", "ArrowDown", "ChevronRight",
-        "ChevronLeft", "ChevronUp", "ChevronDown", "ExternalLink", "Share", "Copy", "File",
-        "Folder", "Home", "Database", "Server", "Cpu", "Activity", "BarChart", "BarChart2",
-        "PieChart", "TrendingUp", "TrendingDown", "RefreshCw", "RotateCw", "Loader", "Loader2",
-        "Info", "HelpCircle", "Lock", "Unlock", "Shield", "Zap", "Star", "Heart", "Smile"
-    }
-    return _LUCIDE_EXPORTS_CACHE
+    _LUCIDE_RESOLVED = False
+    return None
 
 
 def normalize_route_path(path: str) -> str:
@@ -91,12 +108,132 @@ def normalize_route_path(path: str) -> str:
     return normalized if normalized.startswith('/') else f"/{normalized}"
 
 
+def extract_server_routes(server_code: str) -> Tuple[Set[Tuple[str, str]], Set[str]]:
+    """
+    Extracts all routes from Express.js server code, supporting:
+    (a) Direct calls: app.get('/path', ...), router.post('/path', ...)
+    (b) Route chaining: app.route('/path').get(...).post(...)
+        or router.route('/path').get(...).delete(...)
+    (c) Express router mounting: app.use('/prefix', router)
+        and router.use('/prefix', subRouter)
+    Returns:
+        (server_routes, server_paths)
+        server_routes: Set of (METHOD, normalized_path)
+        server_paths: Set of normalized_path
+    """
+    clean_code = remove_js_comments(server_code)
+    
+    server_routes: Set[Tuple[str, str]] = set()
+    server_paths: Set[str] = set()
+
+    # Dictionary mapping identifier -> list of (method, raw_path)
+    object_routes: Dict[str, List[Tuple[str, str]]] = {}
+    
+    # List of (parent_ident, mount_prefix, child_ident)
+    mounts: List[Tuple[str, str, str]] = []
+
+    # 1. Parse router mounts: app.use('/api', router) or parent.use('/prefix', child)
+    mount_with_prefix = re.compile(
+        r'\b([a-zA-Z0-9_$]+)\.use\s*\(\s*[\'"`]([^\'"`]+)[\'"`]\s*,\s*([a-zA-Z0-9_$]+)\b'
+    )
+    for m in mount_with_prefix.finditer(clean_code):
+        parent, prefix, child = m.group(1), m.group(2).strip(), m.group(3)
+        mounts.append((parent, prefix, child))
+
+    # Mount without explicit prefix: app.use(router)
+    mount_without_prefix = re.compile(
+        r'\b([a-zA-Z0-9_$]+)\.use\s*\(\s*([a-zA-Z0-9_$]+)\s*\)'
+    )
+    for m in mount_without_prefix.finditer(clean_code):
+        parent, child = m.group(1), m.group(2)
+        if child not in {"express", "cors"}:
+            mounts.append((parent, "", child))
+
+    # 2. Parse direct route calls: ident.(get|post|put|patch|delete)('path', ...)
+    direct_route_pattern = re.compile(
+        r'\b([a-zA-Z0-9_$]+)\.(get|post|put|patch|delete)\s*\(\s*[\'"`]([^\'"`]+)[\'"`]',
+        re.IGNORECASE
+    )
+    for m in direct_route_pattern.finditer(clean_code):
+        ident = m.group(1)
+        method = m.group(2).upper()
+        path = m.group(3)
+        if ident not in object_routes:
+            object_routes[ident] = []
+        object_routes[ident].append((method, path))
+
+    # 3. Parse route chains: ident.route('/path').get(...).post(...)
+    route_chain_pattern = re.compile(
+        r'\b([a-zA-Z0-9_$]+)\.route\s*\(\s*[\'"`]([^\'"`]+)[\'"`]\s*\)',
+        re.IGNORECASE
+    )
+    for m in route_chain_pattern.finditer(clean_code):
+        ident = m.group(1)
+        path = m.group(2)
+        if ident not in object_routes:
+            object_routes[ident] = []
+        
+        # Look ahead for chained method calls until semicolon or next statement
+        tail = clean_code[m.end():]
+        end_idx = len(tail)
+        semicolon_idx = tail.find(';')
+        if semicolon_idx != -1:
+            end_idx = semicolon_idx
+        
+        decl_match = re.search(r'\b(?:const|let|var|function|app\.|module\.exports)\b', tail[:end_idx])
+        if decl_match:
+            end_idx = decl_match.start()
+        
+        chain_segment = tail[:end_idx]
+        method_pattern = re.compile(r'\.\s*(get|post|put|patch|delete)\s*\(', re.IGNORECASE)
+        for mm in method_pattern.finditer(chain_segment):
+            method = mm.group(1).upper()
+            object_routes[ident].append((method, path))
+
+    # 4. Resolve mount prefixes
+    prefixes: Dict[str, List[str]] = {"app": [""]}
+    
+    # Propagate prefixes across mounts (support nested routers)
+    for _ in range(5):
+        updated = False
+        for parent, mount_prefix, child in mounts:
+            if parent in prefixes:
+                for parent_prefix in prefixes[parent]:
+                    combined = f"{parent_prefix}/{mount_prefix}".replace("//", "/") if parent_prefix else mount_prefix
+                    norm_combined = normalize_route_path(combined)
+                    if child not in prefixes:
+                        prefixes[child] = []
+                    if norm_combined not in prefixes[child]:
+                        prefixes[child].append(norm_combined)
+                        updated = True
+        if not updated:
+            break
+
+    # 5. Build final server_routes and server_paths
+    for ident, routes in object_routes.items():
+        if ident in prefixes:
+            for pfx in prefixes[ident]:
+                for method, raw_path in routes:
+                    full_path = f"{pfx}/{raw_path}".replace("//", "/") if pfx else raw_path
+                    norm = normalize_route_path(full_path)
+                    server_routes.add((method, norm))
+                    server_paths.add(norm)
+        else:
+            # Fallback for router instances whose mounting was not explicit
+            for method, raw_path in routes:
+                norm = normalize_route_path(raw_path)
+                server_routes.add((method, norm))
+                server_paths.add(norm)
+
+    return server_routes, server_paths
+
+
 def validate_syntax(files: Dict[str, str]) -> List[StructuredError]:
     """
     JS syntax checker:
     - For server.js: executes `node --check`
     - For App.js, api.js, and other frontend JS/JSX files: executes esbuild via backend/check_syntax.js
-    Returns structured errors with exact file and line numbers.
+    Returns explicit 'validator-unavailable' warning when esbuild cannot be resolved.
     """
     errors: List[StructuredError] = []
     checker_script = os.path.abspath(os.path.join(os.path.dirname(__file__), "check_syntax.js"))
@@ -124,7 +261,6 @@ def validate_syntax(files: Dict[str, str]) -> List[StructuredError]:
                 )
                 if proc.returncode != 0:
                     stderr = proc.stderr
-                    # Parse line number from node error output (e.g., C:\path\tmp.js:12 or :12)
                     line_no = 1
                     line_match = re.search(r':(\d+)\r?\n', stderr)
                     if line_match:
@@ -133,7 +269,6 @@ def validate_syntax(files: Dict[str, str]) -> List[StructuredError]:
                         except ValueError:
                             line_no = 1
 
-                    # Parse message
                     msg = "Node.js syntax error in server code."
                     for line in stderr.splitlines():
                         if "SyntaxError:" in line or "Error:" in line:
@@ -176,7 +311,14 @@ def validate_syntax(files: Dict[str, str]) -> List[StructuredError]:
                 )
                 if proc.returncode == 0 and proc.stdout.strip():
                     result = json.loads(proc.stdout.strip())
-                    if not result.get("valid", True):
+                    if result.get("unavailable") or result.get("warning") == "esbuild unavailable":
+                        errors.append({
+                            "file": file_path,
+                            "line": 1,
+                            "rule": "validator-unavailable",
+                            "message": "esbuild could not be resolved for frontend syntax validation."
+                        })
+                    elif not result.get("valid", True):
                         for err in result.get("errors", []):
                             errors.append({
                                 "file": file_path,
@@ -184,6 +326,22 @@ def validate_syntax(files: Dict[str, str]) -> List[StructuredError]:
                                 "rule": "syntax",
                                 "message": f"Syntax error: {err.get('message', 'Syntax error')}"
                             })
+                else:
+                    stderr = proc.stderr if proc else ""
+                    if "Cannot find module" in stderr or "esbuild" in stderr:
+                        errors.append({
+                            "file": file_path,
+                            "line": 1,
+                            "rule": "validator-unavailable",
+                            "message": "esbuild could not be resolved for frontend syntax validation."
+                        })
+                    else:
+                        errors.append({
+                            "file": file_path,
+                            "line": 1,
+                            "rule": "syntax",
+                            "message": f"Syntax validation failed: {stderr.strip() or 'Execution error'}"
+                        })
             except Exception as ex:
                 errors.append({
                     "file": file_path,
@@ -204,9 +362,11 @@ def validate_syntax(files: Dict[str, str]) -> List[StructuredError]:
 def validate_route_contract(files: Dict[str, str], api_spec: Optional[List[Dict[str, Any]]] = None) -> List[StructuredError]:
     """
     Route contract check:
-    - Parses app.get/post/put/patch/delete(...) calls from server.js.
-    - Normalizes path (:id) and compares against api_spec; MISSING routes are errors.
-    - Verifies every URL called in services/api.js maps to an existing server.js route.
+    - Extracts server routes with full router mounting (app.use) and route chaining (app.route).
+    - Compares against api_spec; missing endpoints are errors.
+    - Resolves client URLs in services/api.js:
+      * Resolves ${BASE}/api, ${API_URL}/api template strings.
+      * Treats trailing ${...} as optional parameter (matches /path/:id OR /path).
     """
     errors: List[StructuredError] = []
 
@@ -229,21 +389,7 @@ def validate_route_contract(files: Dict[str, str], api_spec: Optional[List[Dict[
         return errors
 
     # Extract all route registrations from server.js
-    # Matches: app.get('/api/items', ...), router.post("/api/items/:id", ...)
-    route_pattern = re.compile(
-        r'\b(?:app|router)\.(get|post|put|patch|delete)\s*\(\s*[\'"`]([^\'"`]+)[\'"`]',
-        re.IGNORECASE
-    )
-
-    server_routes: Set[Tuple[str, str]] = set()  # (METHOD, normalized_path)
-    server_paths: Set[str] = set()               # normalized_path
-
-    for match in route_pattern.finditer(server_code):
-        method = match.group(1).upper()
-        raw_path = match.group(2)
-        norm_path = normalize_route_path(raw_path)
-        server_routes.add((method, norm_path))
-        server_paths.add(norm_path)
+    server_routes, server_paths = extract_server_routes(server_code)
 
     # 1. Compare against api_spec
     if api_spec and isinstance(api_spec, list):
@@ -274,34 +420,65 @@ def validate_route_contract(files: Dict[str, str], api_spec: Optional[List[Dict[
             break
 
     if api_client_code:
-        # Match URL patterns in fetch or axios calls:
-        # e.g., fetch('http://localhost:5000/api/items') or fetch(`/api/items/${id}`) or fetch('/api/items/' + id)
-        url_patterns = [
-            # Template literals with ${...}
-            r'`(?:https?://[^/`]+)?(/api/[^`]*)`',
-            # Single/double quoted strings
-            r'[\'"](?:https?://[^/\'"]+)?(/api/[^\'"]*)[\'"]'
-        ]
+        clean_api_code = remove_js_comments(api_client_code)
 
-        lines = api_client_code.splitlines()
-        for idx, line in enumerate(lines, start=1):
-            for pat in url_patterns:
-                for match in re.finditer(pat, line):
-                    raw_url = match.group(1)
-                    # Normalize dynamic segments like ${id} or ${item.id} to :id
-                    normalized_url = re.sub(r'\$\{[^}]+\}', ':id', raw_url)
-                    # Normalize concatenated string tail like ' + id' or '/123'
-                    normalized_url = re.sub(r'/[0-9]+', '/:id', normalized_url)
-                    normalized_path = normalize_route_path(normalized_url)
+        template_pattern = re.compile(r'`([^`]+)`')
+        quoted_pattern = re.compile(r'[\'"]([^\'"]+)[\'"]')
 
-                    # Check if normalized_path maps to any known server route path
-                    if normalized_path not in server_paths:
-                        errors.append({
-                            "file": api_client_path,
-                            "line": idx,
-                            "rule": "route-contract",
-                            "message": f"Client calls endpoint '{raw_url}' which is not implemented in server.js"
-                        })
+        extracted_calls = []
+
+        # Find template literals with line numbers
+        for m in template_pattern.finditer(clean_api_code):
+            content = m.group(1)
+            line_no = api_client_code[:m.start()].count('\n') + 1
+            if "/api" in content:
+                extracted_calls.append((content, line_no, True))
+
+        # Find quoted literals with line numbers
+        for m in quoted_pattern.finditer(clean_api_code):
+            content = m.group(1)
+            line_no = api_client_code[:m.start()].count('\n') + 1
+            if "/api" in content:
+                extracted_calls.append((content, line_no, False))
+
+        for raw_url, line_no, is_template in extracted_calls:
+            api_idx = raw_url.find('/api')
+            if api_idx == -1:
+                continue
+            path_part = raw_url[api_idx:]
+            
+            # Strip query string
+            path_part = path_part.split('?')[0].strip()
+
+            candidate_paths: Set[str] = set()
+
+            if is_template:
+                # Check for trailing ${...} parameter
+                trailing_param = re.search(r'/\$\{[^}]+\}\s*$', path_part)
+                if trailing_param:
+                    # Treat trailing ${...} as an optional parameter:
+                    # Candidate 1: parameterized route -> /path/:id
+                    p_with_id = path_part[:trailing_param.start()] + '/:id'
+                    candidate_paths.add(normalize_route_path(p_with_id))
+                    # Candidate 2: base route without param -> /path
+                    p_without_id = path_part[:trailing_param.start()]
+                    candidate_paths.add(normalize_route_path(p_without_id))
+                else:
+                    # Replace intermediate ${...} with :id
+                    normalized = re.sub(r'\$\{[^}]+\}', ':id', path_part)
+                    candidate_paths.add(normalize_route_path(normalized))
+            else:
+                normalized = re.sub(r'/[0-9]+', '/:id', path_part)
+                candidate_paths.add(normalize_route_path(normalized))
+
+            # Verify if ANY candidate path maps to an existing server route
+            if not any(cand in server_paths for cand in candidate_paths):
+                errors.append({
+                    "file": api_client_path,
+                    "line": line_no,
+                    "rule": "route-contract",
+                    "message": f"Client calls endpoint '{raw_url}' which is not implemented in server.js"
+                })
 
     return errors
 
@@ -310,7 +487,9 @@ def validate_import_allowlist(files: Dict[str, str]) -> List[StructuredError]:
     """
     Import allowlist validator:
     - Frontend allowed packages: react, react-dom, react-dom/client, lucide-react.
-      * All named icon imports from lucide-react are checked against installed exports.
+      * All named icon imports from lucide-react (including multi-line imports) are checked.
+      * When lucide-react cannot be resolved, returns explicit 'validator-unavailable' warning
+        instead of emitting false errors.
     - Backend allowed packages: express, cors, standard Node.js built-ins.
     - Local relative imports (starting with ./ or ../) are allowed.
     Unknown imports are structured errors.
@@ -324,10 +503,10 @@ def validate_import_allowlist(files: Dict[str, str]) -> List[StructuredError]:
         "os", "url", "events", "util", "stream", "process", "dotenv", "buffer"
     }
 
-    # Regexes for ES imports and CommonJS requires
+    # Multi-line aware ES import pattern
     import_stmt_pattern = re.compile(
-        r'^\s*import\s+(?:([\w*\s{},]+)\s+from\s+)?[\'"]([^\'"]+)[\'"]',
-        re.MULTILINE
+        r'(?m)^\s*import\s+(?:([\w*\s{},]+?)\s+from\s+)?[\'"]([^\'"]+)[\'"]',
+        re.DOTALL
     )
     require_pattern = re.compile(
         r'\brequire\s*\(\s*[\'"]([^\'"]+)[\'"]\s*\)'
@@ -344,64 +523,72 @@ def validate_import_allowlist(files: Dict[str, str]) -> List[StructuredError]:
         is_backend = lower.endswith('server.js') or '/server/' in lower or lower.startswith('server/')
         allowed_pkgs = allowed_backend_packages if is_backend else allowed_frontend_packages
 
-        lines = code.splitlines()
-        for line_idx, line in enumerate(lines, start=1):
-            stripped = line.strip()
-            # Ignore comment lines
-            if stripped.startswith('//') or stripped.startswith('/*') or stripped.startswith('*'):
+        clean_code = remove_js_comments(code)
+
+        # 1. Check ES imports (multi-line aware)
+        for match in import_stmt_pattern.finditer(clean_code):
+            clause = match.group(1) or ""
+            pkg = match.group(2).strip()
+            line_no = code[:match.start()].count('\n') + 1
+
+            # Local relative imports are allowed
+            if pkg.startswith('.') or pkg.startswith('/'):
                 continue
 
-            # 1. Check ES imports
-            for match in import_stmt_pattern.finditer(line):
-                clause = match.group(1) or ""
-                pkg = match.group(2).strip()
+            # Top-level package name
+            base_pkg = pkg.split('/')[0] if not pkg.startswith('@') else '/'.join(pkg.split('/')[:2])
+            
+            if pkg not in allowed_pkgs and base_pkg not in allowed_pkgs:
+                errors.append({
+                    "file": file_path,
+                    "line": line_no,
+                    "rule": "import-allowlist",
+                    "message": f"Import of unapproved package '{pkg}' is not permitted."
+                })
+                continue
 
-                # Local relative imports are allowed
-                if pkg.startswith('.') or pkg.startswith('/'):
-                    continue
-
-                # Top-level package name
-                base_pkg = pkg.split('/')[0] if not pkg.startswith('@') else '/'.join(pkg.split('/')[:2])
-                
-                if pkg not in allowed_pkgs and base_pkg not in allowed_pkgs:
+            # For lucide-react: validate every named icon export
+            if pkg == "lucide-react":
+                if lucide_exports is None:
+                    # Explicit unavailable warning instead of false errors
                     errors.append({
                         "file": file_path,
-                        "line": line_idx,
-                        "rule": "import-allowlist",
-                        "message": f"Import of unapproved package '{pkg}' is not permitted."
+                        "line": line_no,
+                        "rule": "validator-unavailable",
+                        "message": "lucide-react could not be resolved to validate icon exports."
                     })
-                    continue
-
-                # For lucide-react: validate every named icon export
-                if pkg == "lucide-react" and "{" in clause:
+                elif "{" in clause:
                     named_block = clause[clause.find("{") + 1 : clause.rfind("}")]
                     raw_items = [item.strip() for item in named_block.split(",") if item.strip()]
                     for item in raw_items:
-                        # Clean alias e.g. "Trash2 as DeleteIcon" -> "Trash2"
                         parts = re.split(r'\s+as\s+', item)
                         icon_name = parts[0].strip()
+                        icon_idx = match.start(1) + clause.find(item)
+                        icon_line = code[:icon_idx].count('\n') + 1
                         if icon_name and icon_name not in lucide_exports:
                             errors.append({
                                 "file": file_path,
-                                "line": line_idx,
+                                "line": icon_line,
                                 "rule": "import-allowlist",
                                 "message": f"Icon '{icon_name}' is not exported by lucide-react."
                             })
 
-            # 2. Check CommonJS require calls
-            for match in require_pattern.finditer(line):
-                pkg = match.group(1).strip()
-                if pkg.startswith('.') or pkg.startswith('/'):
-                    continue
+        # 2. Check CommonJS require calls
+        for match in require_pattern.finditer(clean_code):
+            pkg = match.group(1).strip()
+            line_no = code[:match.start()].count('\n') + 1
 
-                base_pkg = pkg.split('/')[0] if not pkg.startswith('@') else '/'.join(pkg.split('/')[:2])
-                if pkg not in allowed_pkgs and base_pkg not in allowed_pkgs:
-                    errors.append({
-                        "file": file_path,
-                        "line": line_idx,
-                        "rule": "import-allowlist",
-                        "message": f"Require of unapproved package '{pkg}' is not permitted."
-                    })
+            if pkg.startswith('.') or pkg.startswith('/'):
+                continue
+
+            base_pkg = pkg.split('/')[0] if not pkg.startswith('@') else '/'.join(pkg.split('/')[:2])
+            if pkg not in allowed_pkgs and base_pkg not in allowed_pkgs:
+                errors.append({
+                    "file": file_path,
+                    "line": line_no,
+                    "rule": "import-allowlist",
+                    "message": f"Require of unapproved package '{pkg}' is not permitted."
+                })
 
     return errors
 
@@ -449,7 +636,7 @@ def validate_package_json(files: Dict[str, str]) -> List[StructuredError]:
 
 def validate_all(files: Dict[str, str], api_spec: Optional[List[Dict[str, Any]]] = None) -> List[StructuredError]:
     """
-    Runs all 4 static validation rules and aggregates structured errors.
+    Runs all static validation rules and aggregates structured errors.
     """
     all_errors: List[StructuredError] = []
     
