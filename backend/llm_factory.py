@@ -56,7 +56,7 @@ def get_llm(temperature: float = 0.2):
     Configurable output ceiling via MAX_TOKENS env var (default: 8192).
     """
     groq_api_key = os.getenv("GROQ_API_KEY", "").strip()
-    google_api_key = os.getenv("GOOGLE_API_KEY", "").strip()
+    google_api_key = os.getenv("GOOGLE_API_KEY", "").strip() or os.getenv("GEMINI_API_KEY", "").strip()
     provider = os.getenv("LLM_PROVIDER", "").lower().strip()
     max_tokens = int(os.getenv("MAX_TOKENS", "8192"))
 
