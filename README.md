@@ -260,7 +260,7 @@ HEAL_REGEX=0
 # Security & CORS
 FRONTEND_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
 RATE_LIMIT=10/minute
-GENERATION_TIMEOUT=120
+GENERATION_TIMEOUT=180 # per-attempt budget (default: 180s)
 MAX_PROMPT_LENGTH=5000
 ```
 
