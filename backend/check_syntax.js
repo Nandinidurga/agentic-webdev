@@ -47,6 +47,6 @@ if (esbuild) {
     console.log(JSON.stringify({ valid: false, errors }));
   }
 } else {
-  // Graceful fallback if esbuild binary is not reachable
-  console.log(JSON.stringify({ valid: true, errors: [], warning: 'esbuild unavailable' }));
+  // Explicit unavailable report when esbuild binary is not reachable
+  console.log(JSON.stringify({ valid: false, unavailable: true, errors: [], warning: 'esbuild unavailable' }));
 }
